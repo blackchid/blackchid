@@ -24,8 +24,10 @@ import warnings
 
 # Suppress the benign torchcodec/pyannote warning on import
 warnings.filterwarnings("ignore", message="torchcodec is not installed correctly")
+warnings.filterwarnings("ignore", category=UserWarning, module="pyannote")
 
 import whisperx
+from whisperx.diarize import DiarizationPipeline
 
 
 def print_separator(char: str = "─", width: int = 64) -> None:
@@ -103,7 +105,7 @@ def main() -> None:
     # This is a community model that only requires a HF token — no gated
     # model approval needed (unlike pyannote/speaker-diarization-3.x).
     print(f"[4/4] Running speaker diarization …", flush=True)
-    diarize_model = whisperx.DiarizationPipeline(
+    diarize_model = DiarizationPipeline(
         token=hf_token,
         device=DEVICE,
     )
