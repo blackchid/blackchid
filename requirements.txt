@@ -1,0 +1,5 @@
+# Core dependencies — pinned versions
+# Python 3.11 required (whisperx is not compatible with 3.12+)
+torch==2.8.0
+torchaudio==2.8.0
+whisperx==3.8.6
