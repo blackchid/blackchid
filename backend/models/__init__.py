@@ -1,0 +1,23 @@
+"""
+models/__init__.py
+
+Import all models here so that:
+  1. Alembic's autogenerate can discover every table through Base.metadata
+  2. Anywhere that does `from models import Project` just works
+"""
+
+from .base import Base                            # noqa: F401
+from .project import Project                      # noqa: F401
+from .recording import Recording                  # noqa: F401
+from .transcript_segment import TranscriptSegment # noqa: F401
+from .tag import Tag                              # noqa: F401
+from .tag_application import TagApplication       # noqa: F401
+
+__all__ = [
+    "Base",
+    "Project",
+    "Recording",
+    "TranscriptSegment",
+    "Tag",
+    "TagApplication",
+]
