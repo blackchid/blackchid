@@ -45,3 +45,4 @@ output/
 
 # Hugging Face cache (large model weights — don't commit)
 .cache/
+backend/.venv_alembic/
