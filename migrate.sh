@@ -14,5 +14,5 @@ CMD="${*:-upgrade head}"
 
 echo "→ Running: alembic $CMD"
 docker compose -f "$COMPOSE_FILE" run --rm \
-  -e DATABASE_URL="postgresql://\${POSTGRES_USER:-uxr}:\${POSTGRES_PASSWORD:-uxr_secret}@postgres:5432/\${POSTGRES_DB:-uxr_db}" \
+  -e DATABASE_URL="postgresql://${POSTGRES_USER:-uxr}:${POSTGRES_PASSWORD:-uxr_secret}@postgres:5432/${POSTGRES_DB:-uxr_db}" \
   backend sh -c "alembic -c alembic.ini $CMD"
