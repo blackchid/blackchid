@@ -2,15 +2,17 @@ import os
 import shutil
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
+from typing import List
 from database import get_db
 from models.project import Project
 from models.recording import Recording
-from schemas.recording import RecordingResponse
+from models.transcript_segment import TranscriptSegment
+from schemas.recording import RecordingResponse, TranscriptSegmentResponse
 from services.transcription import process_recording
 
 router = APIRouter(tags=["recordings"])
 
-UPLOAD_DIR = "/app/uploads"
+UPLOAD_DIR = "uploads"
 
 @router.post("/projects/{project_id}/recordings", response_model=RecordingResponse)
 async def upload_recording(
@@ -66,3 +68,20 @@ def get_recording(recording_id: str, db: Session = Depends(get_db)):
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
     return recording
+
+@router.get("/recordings/{recording_id}/transcript", response_model=List[TranscriptSegmentResponse])
+def get_transcript(recording_id: str, db: Session = Depends(get_db)):
+    """
+    Get all transcript segments for a recording.
+    """
+    recording = db.query(Recording).filter(Recording.id == recording_id).first()
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+        
+    segments = (
+        db.query(TranscriptSegment)
+        .filter(TranscriptSegment.recording_id == recording_id)
+        .order_by(TranscriptSegment.start_time)
+        .all()
+    )
+    return segments
