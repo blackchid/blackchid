@@ -1,25 +1,28 @@
 """
-transcribe.py — WhisperX transcription + forced alignment (no diarization).
+transcribe.py — WhisperX transcription + alignment + speaker diarization.
 
-Produces:
-  1. Segment-level output (from basic transcription)
-  2. Word-level timestamps (from forced alignment)
+Pipeline:
+  1. Transcribe  (Whisper)          → segments with rough timestamps
+  2. Align       (wav2vec2)         → word-level timestamps
+  3. Diarize     (Pyannote)         → who spoke when
+  4. Combine                        → start | end | speaker | text per segment
 
 Usage:
-    python transcribe.py <audio_file>
+    HF_TOKEN=hf_xxx python transcribe.py <audio_file>
 
-Example:
-    python transcribe.py test.mp3
+    Or set it once in your shell:
+        export HF_TOKEN=hf_xxx
+        python transcribe.py test.mp3
 
-Requires:
-    - FFmpeg on your system  (brew install ffmpeg)
-    - pip install -r requirements.txt
+Get your token: https://huggingface.co/settings/tokens
+(Read scope is enough. No gated model approval needed for the community model.)
 """
 
+import os
 import sys
 import warnings
 
-# Suppress the benign torchcodec/FFmpeg warning from pyannote at import time
+# Suppress the benign torchcodec/pyannote warning on import
 warnings.filterwarnings("ignore", message="torchcodec is not installed correctly")
 
 import whisperx
@@ -31,128 +34,138 @@ def print_separator(char: str = "─", width: int = 64) -> None:
 
 def main() -> None:
     if len(sys.argv) < 2:
-        print("Usage: python transcribe.py <audio_file>")
+        print("Usage: HF_TOKEN=hf_xxx python transcribe.py <audio_file>")
         sys.exit(1)
 
     audio_path = sys.argv[1]
 
-    # ── Config ───────────────────────────────────────────────────────────────
+    # ── Read HuggingFace token from environment ───────────────────────────────
+    # We never hard-code secrets in source code.
+    # Set it in your shell:  export HF_TOKEN=hf_...
+    hf_token = os.environ.get("HF_TOKEN")
+    if not hf_token:
+        print("ERROR: HF_TOKEN environment variable is not set.")
+        print("  Get a token at: https://huggingface.co/settings/tokens")
+        print("  Then run: export HF_TOKEN=hf_xxx")
+        sys.exit(1)
+
+    # ── Config ────────────────────────────────────────────────────────────────
     MODEL_SIZE = "small"    # tiny | base | small | medium | large-v2 | large-v3
     DEVICE     = "cpu"      # "cuda" if you have an NVIDIA GPU
-    COMPUTE    = "float32"  # float16 requires CUDA; use float32 on CPU / Apple Silicon
+    COMPUTE    = "float32"  # float16 needs CUDA; use float32 on CPU / Apple Silicon
     BATCH_SIZE = 16         # lower if you hit memory limits
 
     # ─────────────────────────────────────────────────────────────────────────
-    # STEP 1 — Load Whisper model and transcribe
+    # STEP 1 — Transcribe
     # ─────────────────────────────────────────────────────────────────────────
-    # whisperx.load_model wraps faster-whisper under the hood.
-    # It also attaches a VAD (Voice Activity Detector) that first finds where
-    # speech exists, so Whisper only processes real speech chunks — not silence.
-    print(f"[1/3] Loading WhisperX '{MODEL_SIZE}' model …", flush=True)
+    # Whisper turns audio into text. At this stage we only know which
+    # SENTENCE was said and roughly when — not which word, and not who said it.
+    print(f"\n[1/4] Loading WhisperX '{MODEL_SIZE}' model …", flush=True)
     model = whisperx.load_model(MODEL_SIZE, DEVICE, compute_type=COMPUTE)
 
-    # model.transcribe() returns a dict:
-    #   { "language": "en",
-    #     "segments": [ {"text": "...", "start": 0.0, "end": 2.1}, ... ] }
-    # Segments are coarse — whole sentences or phrases, NOT individual words yet.
-    print(f"[2/3] Transcribing: {audio_path} …", flush=True)
+    print(f"[2/4] Transcribing: {audio_path} …", flush=True)
     result = model.transcribe(audio_path, batch_size=BATCH_SIZE)
 
     language = result.get("language", "unknown")
     segments  = result.get("segments", [])
-
-    # ── Print Step 1 output ──────────────────────────────────────────────────
-    print(f"\n{'═' * 64}")
-    print(f"  STEP 1 — Basic Transcription")
-    print(f"{'═' * 64}")
-    print(f"  Detected language : {language}")
-    print(f"  Segments found    : {len(segments)}")
-    print_separator()
-
-    for seg in segments:
-        t  = f"[{seg['start']:7.2f}s → {seg['end']:7.2f}s]"
-        print(f"{t}  {seg['text'].strip()}")
-
-    print_separator()
+    print(f"      → language={language}, segments={len(segments)}", flush=True)
 
     # ─────────────────────────────────────────────────────────────────────────
     # STEP 2 — Forced Alignment (word-level timestamps)
     # ─────────────────────────────────────────────────────────────────────────
-    # What is forced alignment?
-    #   Whisper outputs text but only knows approximately WHEN each chunk was
-    #   spoken. Forced alignment takes the text Whisper produced and the raw
-    #   audio waveform, then uses a wav2vec2 acoustic model to precisely pin
-    #   every word (and optionally every character) to its exact millisecond.
-    #
-    # load_align_model() picks the right wav2vec2 model for the detected
-    # language automatically (e.g. WAV2VEC2_ASR_BASE_960H for English).
-    print(f"\n[3/3] Loading alignment model for language '{language}' …", flush=True)
+    # wav2vec2 reads the raw audio frame-by-frame and matches each phoneme
+    # to the text Whisper produced, giving us millisecond-accurate word times.
+    print(f"[3/4] Loading alignment model for '{language}' …", flush=True)
     align_model, align_metadata = whisperx.load_align_model(
         language_code=language,
         device=DEVICE,
     )
 
-    # whisperx.align() takes:
-    #   - segments  : the coarse segments from Step 1
-    #   - model     : the wav2vec2 alignment model
-    #   - metadata  : language + tokenizer dictionary
-    #   - audio     : the original audio file path (re-read internally)
-    #   - device    : same device as above
-    #
-    # Returns a new dict with the same segments, but each segment now has
-    # a "words" list:
-    #   { "word": "hello", "start": 1.23, "end": 1.56, "score": 0.99 }
-    print(f"Aligning …", flush=True)
+    print(f"      Aligning …", flush=True)
     aligned = whisperx.align(
         segments,
         align_model,
         align_metadata,
         audio_path,
         DEVICE,
-        return_char_alignments=False,   # True would also give per-character times
+        return_char_alignments=False,
     )
 
-    aligned_segments = aligned.get("segments", [])
+    # ─────────────────────────────────────────────────────────────────────────
+    # STEP 3 — Diarization ("who spoke when")
+    # ─────────────────────────────────────────────────────────────────────────
+    # Pyannote's speaker diarization model listens to the audio and returns
+    # time ranges labelled SPEAKER_00, SPEAKER_01, etc.
+    # It does NOT know who the person IS — just that these time ranges belong
+    # to the same distinct voice.
+    #
+    # Model used: pyannote/speaker-diarization-community-1
+    # This is a community model that only requires a HF token — no gated
+    # model approval needed (unlike pyannote/speaker-diarization-3.x).
+    print(f"[4/4] Running speaker diarization …", flush=True)
+    diarize_model = whisperx.DiarizationPipeline(
+        token=hf_token,
+        device=DEVICE,
+    )
 
-    # ── Print Step 2 output ──────────────────────────────────────────────────
-    print(f"\n{'═' * 64}")
-    print(f"  STEP 2 — Word-Level Alignment")
-    print(f"{'═' * 64}")
+    diarize_segments = diarize_model(
+        audio_path,
+        # Optionally hint at speaker count for better accuracy:
+        # min_speakers=1,
+        # max_speakers=5,
+    )
 
-    for seg_idx, seg in enumerate(aligned_segments, 1):
-        seg_start = seg.get("start", 0)
-        seg_end   = seg.get("end",   0)
-        seg_text  = seg.get("text", "").strip()
-        words     = seg.get("words", [])
+    # ─────────────────────────────────────────────────────────────────────────
+    # STEP 4 — Combine: assign a speaker label to each segment (and word)
+    # ─────────────────────────────────────────────────────────────────────────
+    # assign_word_speakers() overlays the diarization time-ranges onto the
+    # aligned segments using an interval tree (O(log n)).
+    # For each segment it picks whichever speaker overlaps the most time.
+    # Each word also gets a speaker label for maximum granularity.
+    final = whisperx.assign_word_speakers(diarize_segments, aligned)
+    final_segments = final.get("segments", [])
 
-        print(f"\n  Segment {seg_idx}: [{seg_start:.2f}s → {seg_end:.2f}s]")
-        print(f"  \"{seg_text}\"")
-        print_separator("·", 64)
+    # ─────────────────────────────────────────────────────────────────────────
+    # OUTPUT — clean, readable table
+    # ─────────────────────────────────────────────────────────────────────────
+    print(f"\n{'═' * 70}")
+    print(f"  RESULT — Transcription + Alignment + Diarization")
+    print(f"  Language: {language}  |  Segments: {len(final_segments)}")
+    print(f"{'═' * 70}")
+    print(f"  {'START':>8}   {'END':>8}   {'SPEAKER':<14}  TEXT")
+    print_separator("─", 70)
 
-        if words:
-            # Each word dict: {"word": str, "start": float, "end": float, "score": float}
-            # score = alignment confidence (0.0 – 1.0); ~0.9+ is reliable
-            print(f"  {'WORD':<25} {'START':>8}   {'END':>8}   {'SCORE':>6}")
-            print_separator("·", 64)
-            for w in words:
-                word  = w.get("word",  "?")
-                start = w.get("start", None)
-                end   = w.get("end",   None)
-                score = w.get("score", None)
+    for seg in final_segments:
+        start   = seg.get("start", 0)
+        end     = seg.get("end",   0)
+        speaker = seg.get("speaker", "UNKNOWN")
+        text    = seg.get("text", "").strip()
+        print(f"  {start:7.2f}s   {end:7.2f}s   {speaker:<14}  {text}")
 
-                # Some words near segment boundaries may lack timestamps
-                # if the aligner couldn't confidently place them
-                ts_s = f"{start:.3f}s" if start is not None else "  —    "
-                ts_e = f"{end:.3f}s"   if end   is not None else "  —    "
-                sc   = f"{score:.2f}"  if score is not None else "  —  "
+    print_separator("═", 70)
 
-                print(f"  {word:<25} {ts_s:>8}   {ts_e:>8}   {sc:>6}")
-        else:
-            print("  (no word timestamps available for this segment)")
+    # ── Word-level detail (optional deeper view) ─────────────────────────────
+    print(f"\n  WORD-LEVEL DETAIL")
+    print_separator("─", 70)
+    print(f"  {'WORD':<22} {'START':>9}  {'END':>9}  {'SCORE':>6}  {'SPEAKER'}")
+    print_separator("─", 70)
 
-    print(f"\n{'═' * 64}")
-    print("  Done.")
-    print(f"{'═' * 64}\n")
+    for seg in final_segments:
+        for w in seg.get("words", []):
+            word    = w.get("word",    "?")
+            start   = w.get("start",   None)
+            end     = w.get("end",     None)
+            score   = w.get("score",   None)
+            speaker = w.get("speaker", "—")
+
+            ts_s = f"{start:.3f}s" if start is not None else "    —   "
+            ts_e = f"{end:.3f}s"   if end   is not None else "    —   "
+            sc   = f"{score:.2f}"  if score is not None else "  —  "
+
+            print(f"  {word:<22} {ts_s:>9}  {ts_e:>9}  {sc:>6}  {speaker}")
+
+    print_separator("═", 70)
+    print("  Done.\n")
 
 
 if __name__ == "__main__":
