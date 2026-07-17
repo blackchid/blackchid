@@ -5,3 +5,9 @@ sqlalchemy==2.0.36
 pgvector==0.3.6
 alembic==1.14.0
 python-dotenv==1.0.1
+python-multipart==0.0.18
+
+# Transcription dependencies (matching root requirements)
+torch==2.8.0
+torchaudio==2.8.0
+whisperx==3.8.6

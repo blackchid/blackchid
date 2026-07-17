@@ -28,6 +28,9 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-uxr}:${POSTGRES_PASSWORD:-uxr_secret}@postgres:5432/${POSTGRES_DB:-uxr_db}
+      HF_TOKEN: ${HF_TOKEN}
+    volumes:
+      - ./backend/uploads:/app/uploads
     ports:
       - "8000:8000"
     depends_on:
