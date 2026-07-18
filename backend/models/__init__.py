@@ -14,6 +14,8 @@ from .tag import Tag                              # noqa: F401
 from .tag_application import TagApplication       # noqa: F401
 from .user import User                            # noqa: F401
 from .project_member import ProjectMember         # noqa: F401
+from .insight import Insight                      # noqa: F401
+from .insight_evidence import InsightEvidence     # noqa: F401
 
 __all__ = [
     "Base",
@@ -24,4 +26,6 @@ __all__ = [
     "TagApplication",
     "User",
     "ProjectMember",
+    "Insight",
+    "InsightEvidence",
 ]

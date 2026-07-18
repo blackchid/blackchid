@@ -47,3 +47,12 @@ def require_tag_role(db: Session, user: User, tag_id: str, allowed_roles: list[s
     if not tag:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found")
     return require_project_role(db, user, str(tag.project_id), allowed_roles)
+
+
+def require_insight_role(db: Session, user: User, insight_id: str, allowed_roles: list[str]) -> str:
+    """Ensures the user has an allowed role for the project containing the insight."""
+    from models.insight import Insight  # local import to avoid circular dep if needed
+    insight = db.query(Insight).filter(Insight.id == insight_id).first()
+    if not insight:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Insight not found")
+    return require_project_role(db, user, str(insight.project_id), allowed_roles)
