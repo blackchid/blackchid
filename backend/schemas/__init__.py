@@ -1,6 +1,6 @@
 from .recording import RecordingResponse, TranscriptSegmentResponse
 from .project import ProjectCreate, ProjectResponse
-from .tag import TagCreate, TagResponse, TagApply, TagApplicationResponse
+from .tag import TagCreate, TagResponse, TagApply, TagApplicationResponse, TagApplicationDetail
 
 __all__ = [
     "RecordingResponse",
@@ -11,4 +11,5 @@ __all__ = [
     "TagResponse",
     "TagApply",
     "TagApplicationResponse",
+    "TagApplicationDetail",
 ]

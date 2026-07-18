@@ -7,8 +7,11 @@ from typing import List
 from database import get_db
 from models.project import Project
 from models.recording import Recording
+from models.tag import Tag
+from models.tag_application import TagApplication
 from models.transcript_segment import TranscriptSegment
 from schemas.recording import RecordingResponse, TranscriptSegmentResponse
+from schemas.tag import TagApplicationDetail
 from services.transcription import process_recording
 
 router = APIRouter(tags=["recordings"])
@@ -118,3 +121,41 @@ def stream_audio(recording_id: str, db: Session = Depends(get_db)):
         filename=recording.filename,
         headers={"Accept-Ranges": "bytes"},
     )
+
+@router.get("/recordings/{recording_id}/tag-applications", response_model=List[TagApplicationDetail])
+def get_recording_tag_applications(recording_id: str, db: Session = Depends(get_db)):
+    """
+    Return all tag applications for every segment in this recording.
+    One query with a join — no N+1. The frontend uses this to render
+    tag chips on each segment row without separate per-segment fetches.
+    """
+    recording = db.query(Recording).filter(Recording.id == recording_id).first()
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+
+    rows = (
+        db.query(
+            TagApplication.id,
+            TagApplication.segment_id,
+            TagApplication.tag_id,
+            Tag.name.label("tag_name"),
+            Tag.color.label("tag_color"),
+            TagApplication.note,
+        )
+        .join(Tag, Tag.id == TagApplication.tag_id)
+        .join(TranscriptSegment, TranscriptSegment.id == TagApplication.segment_id)
+        .filter(TranscriptSegment.recording_id == recording_id)
+        .all()
+    )
+
+    return [
+        TagApplicationDetail(
+            id=r.id,
+            segment_id=r.segment_id,
+            tag_id=r.tag_id,
+            tag_name=r.tag_name,
+            tag_color=r.tag_color,
+            note=r.note,
+        )
+        for r in rows
+    ]

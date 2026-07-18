@@ -30,3 +30,15 @@ class TagApplicationResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class TagApplicationDetail(BaseModel):
+    """Denormalized view — tag info embedded so the frontend avoids extra requests."""
+    id: str
+    segment_id: str
+    tag_id: str
+    tag_name: str
+    tag_color: str | None
+    note: str | None
+
+    class Config:
+        from_attributes = True
