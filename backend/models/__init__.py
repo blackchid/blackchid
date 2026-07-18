@@ -13,6 +13,7 @@ from .transcript_segment import TranscriptSegment # noqa: F401
 from .tag import Tag                              # noqa: F401
 from .tag_application import TagApplication       # noqa: F401
 from .user import User                            # noqa: F401
+from .project_member import ProjectMember         # noqa: F401
 
 __all__ = [
     "Base",
@@ -22,4 +23,5 @@ __all__ = [
     "Tag",
     "TagApplication",
     "User",
+    "ProjectMember",
 ]

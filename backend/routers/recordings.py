@@ -10,24 +10,31 @@ from models.recording import Recording
 from models.tag import Tag
 from models.tag_application import TagApplication
 from models.transcript_segment import TranscriptSegment
+from models.user import User
+from routers.auth import get_current_user
 from schemas.recording import RecordingResponse, TranscriptSegmentResponse
 from schemas.tag import TagApplicationDetail
+from services.permissions import require_project_role, require_recording_role
 from services.transcription import process_recording
 
 router = APIRouter(tags=["recordings"])
 
 UPLOAD_DIR = "uploads"
 
-@router.post("/projects/{project_id}/recordings", response_model=RecordingResponse)
-async def upload_recording(
+@router.post("/projects/{project_id}/recordings", response_model=RecordingResponse, status_code=202)
+def upload_recording(
     project_id: str,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Upload an audio file for a project, save it, and start transcription in the background.
+    Upload an audio/video file to a project.
+    Creates a Recording record in 'pending' status and launches transcription in the background.
+    Requires editor role.
     """
+    require_project_role(db, current_user, project_id, ["editor"])
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -64,20 +71,26 @@ async def upload_recording(
     return recording
 
 @router.get("/recordings/{recording_id}", response_model=RecordingResponse)
-def get_recording(recording_id: str, db: Session = Depends(get_db)):
-    """
-    Get the status of a recording.
-    """
+def get_recording_status(
+    recording_id: str, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Check the status of a recording. The frontend polls this until 'done'."""
+    require_recording_role(db, current_user, recording_id, ["editor", "viewer"])
     recording = db.query(Recording).filter(Recording.id == recording_id).first()
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
     return recording
 
 @router.get("/recordings/{recording_id}/transcript", response_model=List[TranscriptSegmentResponse])
-def get_transcript(recording_id: str, db: Session = Depends(get_db)):
-    """
-    Get all transcript segments for a recording.
-    """
+def get_recording_transcript(
+    recording_id: str, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all transcript segments for a recording, sorted by start_time."""
+    require_recording_role(db, current_user, recording_id, ["editor", "viewer"])
     recording = db.query(Recording).filter(Recording.id == recording_id).first()
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
@@ -91,11 +104,16 @@ def get_transcript(recording_id: str, db: Session = Depends(get_db)):
     return segments
 
 @router.get("/recordings/{recording_id}/audio")
-def stream_audio(recording_id: str, db: Session = Depends(get_db)):
+def stream_audio(
+    recording_id: str, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Stream the raw audio file for a recording so the frontend can play it.
     FastAPI's FileResponse honours Range requests, letting WaveSurfer seek.
     """
+    require_recording_role(db, current_user, recording_id, ["editor", "viewer"])
     recording = db.query(Recording).filter(Recording.id == recording_id).first()
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
@@ -123,12 +141,17 @@ def stream_audio(recording_id: str, db: Session = Depends(get_db)):
     )
 
 @router.get("/recordings/{recording_id}/tag-applications", response_model=List[TagApplicationDetail])
-def get_recording_tag_applications(recording_id: str, db: Session = Depends(get_db)):
+def get_recording_tag_applications(
+    recording_id: str, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Return all tag applications for every segment in this recording.
     One query with a join — no N+1. The frontend uses this to render
     tag chips on each segment row without separate per-segment fetches.
     """
+    require_recording_role(db, current_user, recording_id, ["editor", "viewer"])
     recording = db.query(Recording).filter(Recording.id == recording_id).first()
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
