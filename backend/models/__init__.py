@@ -12,6 +12,7 @@ from .recording import Recording                  # noqa: F401
 from .transcript_segment import TranscriptSegment # noqa: F401
 from .tag import Tag                              # noqa: F401
 from .tag_application import TagApplication       # noqa: F401
+from .user import User                            # noqa: F401
 
 __all__ = [
     "Base",
@@ -20,4 +21,5 @@ __all__ = [
     "TranscriptSegment",
     "Tag",
     "TagApplication",
+    "User",
 ]

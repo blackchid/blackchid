@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import recordings, projects, tags
+from routers import recordings, projects, tags, auth
 
 app = FastAPI(title="UXR Platform API")
 
@@ -27,6 +27,7 @@ os.makedirs("uploads", exist_ok=True)
 app.include_router(recordings.router)
 app.include_router(projects.router)
 app.include_router(tags.router)
+app.include_router(auth.router)
 
 @app.get("/health")
 async def health_check():
