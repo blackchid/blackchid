@@ -7,6 +7,7 @@ import {
   getProjectTags, Tag,
   getRecordingTagApplications, TagApplication,
   createTag, applyTag, removeTag,
+  getProjectInsights, Insight, addInsightEvidence, InsightEvidence
 } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -60,6 +61,7 @@ export default function TranscriptPage() {
   const [recording, setRecording] = useState<Recording | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [projectTags, setProjectTags] = useState<Tag[]>([]);
+  const [projectInsights, setProjectInsights] = useState<Insight[]>([]);
   const [applications, setApplications] = useState<TagApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +83,8 @@ export default function TranscriptPage() {
   const [showNewTagForm, setShowNewTagForm] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState(TAG_PRESETS[0]);
+  const [sidebarTab, setSidebarTab] = useState<"tags" | "insights">("tags");
+  const [insightNote, setInsightNote] = useState("");
 
   const waveContainerRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -100,8 +104,12 @@ export default function TranscriptPage() {
         setRecording(rec);
         setSegments(segs);
         setApplications(apps);
-        const tags = await getProjectTags(rec.project_id);
+        const [tags, insights] = await Promise.all([
+          getProjectTags(rec.project_id),
+          getProjectInsights(rec.project_id),
+        ]);
         setProjectTags(tags);
+        setProjectInsights(insights);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load");
       } finally {
@@ -214,6 +222,23 @@ export default function TranscriptPage() {
       if (selectedSegId) await handleApplyTag(tag);
     } catch (e) {
       console.error("Failed to create tag", e);
+    } finally {
+      setTagBusy(false);
+    }
+  }
+
+  async function handleAddToInsight(insightId: string) {
+    if (!selectedSegId || tagBusy) return;
+    setTagBusy(true);
+    try {
+      await addInsightEvidence(insightId, selectedSegId, insightNote.trim() || undefined);
+      // We don't necessarily need to track evidence locally like tags, 
+      // but we could show a success message. For now, just clear the note.
+      setInsightNote("");
+      alert("Added to insight!");
+    } catch (e) {
+      console.error("Failed to add to insight", e);
+      alert("Failed to add to insight (already added?)");
     } finally {
       setTagBusy(false);
     }
@@ -441,7 +466,10 @@ export default function TranscriptPage() {
           }}>
             {/* Sidebar header */}
             <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Tag Segment</span>
+              <div style={{ display: "flex", gap: 12 }}>
+                <button onClick={() => setSidebarTab("tags")} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: sidebarTab === "tags" ? "var(--text)" : "var(--text-muted)", cursor: "pointer", padding: 0 }}>Tags</button>
+                <button onClick={() => setSidebarTab("insights")} style={{ background: "none", border: "none", fontSize: 13, fontWeight: 600, color: sidebarTab === "insights" ? "var(--text)" : "var(--text-muted)", cursor: "pointer", padding: 0 }}>Insights</button>
+              </div>
               <button onClick={() => setSelectedSegId(null)}
                 style={{ background: "transparent", border: "none", color: "var(--text-muted)", fontSize: 16, cursor: "pointer", padding: "0 4px", lineHeight: 1 }}>
                 ×
@@ -461,87 +489,129 @@ export default function TranscriptPage() {
             )}
 
             <div style={{ flex: 1, padding: "14px 16px", overflowY: "auto" }}>
-              {/* Applied tags */}
-              {selectedSegId && appsForSeg(selectedSegId).length > 0 && (
+              {sidebarTab === "tags" ? (
                 <>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Applied</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-                    {appsForSeg(selectedSegId).map((app) => (
-                      <div key={app.tag_id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 99, background: `${app.tag_color ?? "#6366f1"}22`, border: `1px solid ${app.tag_color ?? "#6366f1"}55` }}>
-                        <span style={{ fontSize: 12, fontWeight: 600, color: app.tag_color ?? "#818cf8" }}>{app.tag_name}</span>
-                        <button onClick={() => handleRemoveTag(app.tag_id, selectedSegId!)}
-                          style={{ background: "transparent", border: "none", color: app.tag_color ?? "#818cf8", fontSize: 13, cursor: "pointer", padding: "0 2px", lineHeight: 1, opacity: 0.7 }}>×</button>
+                  {/* Applied tags */}
+                  {selectedSegId && appsForSeg(selectedSegId).length > 0 && (
+                    <>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Applied</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
+                        {appsForSeg(selectedSegId).map((app) => (
+                          <div key={app.tag_id} style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 99, background: `${app.tag_color ?? "#6366f1"}22`, border: `1px solid ${app.tag_color ?? "#6366f1"}55` }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: app.tag_color ?? "#818cf8" }}>{app.tag_name}</span>
+                            <button onClick={() => handleRemoveTag(app.tag_id, selectedSegId!)}
+                              style={{ background: "transparent", border: "none", color: app.tag_color ?? "#818cf8", fontSize: 13, cursor: "pointer", padding: "0 2px", lineHeight: 1, opacity: 0.7 }}>×</button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </>
-              )}
+                    </>
+                  )}
 
-              {/* Available tags */}
-              {selectedSegId && unappliedTags(selectedSegId).length > 0 && (
-                <>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Add Tag</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 }}>
-                    {unappliedTags(selectedSegId).map((tag) => (
-                      <button key={tag.id} id={`apply-tag-${tag.id}`}
-                        onClick={() => handleApplyTag(tag)} disabled={tagBusy}
-                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: "pointer", textAlign: "left", transition: "border-color 0.12s" }}
-                        onMouseEnter={(e) => (e.currentTarget.style.borderColor = tag.color ?? "var(--accent)")}
-                        onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
-                      >
-                        <span style={{ width: 10, height: 10, borderRadius: "50%", background: tag.color ?? "#6366f1", flexShrink: 0 }} />
-                        <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500 }}>{tag.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+                  {/* Available tags */}
+                  {selectedSegId && unappliedTags(selectedSegId).length > 0 && (
+                    <>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Add Tag</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 16 }}>
+                        {unappliedTags(selectedSegId).map((tag) => (
+                          <button key={tag.id} id={`apply-tag-${tag.id}`}
+                            onClick={() => handleApplyTag(tag)} disabled={tagBusy}
+                            style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 8, background: "var(--surface-2)", border: "1px solid var(--border)", cursor: "pointer", textAlign: "left", transition: "border-color 0.12s" }}
+                            onMouseEnter={(e) => (e.currentTarget.style.borderColor = tag.color ?? "var(--accent)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+                          >
+                            <span style={{ width: 10, height: 10, borderRadius: "50%", background: tag.color ?? "#6366f1", flexShrink: 0 }} />
+                            <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500 }}>{tag.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
 
-              {/* Create new tag */}
-              {!showNewTagForm ? (
-                <button id="new-tag-btn" onClick={() => setShowNewTagForm(true)}
-                  style={{ width: "100%", padding: "8px 12px", background: "transparent", border: "1px dashed var(--border)", borderRadius: 8, color: "var(--accent-hover)", fontSize: 13, cursor: "pointer", transition: "border-color 0.12s" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}>
-                  + New tag
-                </button>
+                  {/* Create new tag */}
+                  {!showNewTagForm ? (
+                    <button id="new-tag-btn" onClick={() => setShowNewTagForm(true)}
+                      style={{ width: "100%", padding: "8px 12px", background: "transparent", border: "1px dashed var(--border)", borderRadius: 8, color: "var(--accent-hover)", fontSize: 13, cursor: "pointer", transition: "border-color 0.12s" }}
+                      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}>
+                      + New tag
+                    </button>
+                  ) : (
+                    <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }}>Create Tag</div>
+
+                      {/* Name */}
+                      <input id="new-tag-name" autoFocus type="text" placeholder="Tag name…" value={newTagName}
+                        onChange={(e) => setNewTagName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleCreateTag(); if (e.key === "Escape") setShowNewTagForm(false); }}
+                        style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text)", padding: "8px 10px", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
+
+                      {/* Color swatches */}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                        {TAG_PRESETS.map((c) => (
+                          <button key={c} onClick={() => setNewTagColor(c)}
+                            style={{ width: 22, height: 22, borderRadius: "50%", background: c, border: newTagColor === c ? "2px solid white" : "2px solid transparent", outline: newTagColor === c ? `2px solid ${c}` : "none", cursor: "pointer", padding: 0 }} />
+                        ))}
+                      </div>
+
+                      {/* Preview */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                        <span style={{ fontSize: 11, color: "var(--text-subtle)" }}>Preview:</span>
+                        <span style={{ fontSize: 12, fontWeight: 600, padding: "2px 10px", borderRadius: 99, background: `${newTagColor}22`, border: `1px solid ${newTagColor}55`, color: newTagColor }}>
+                          {newTagName || "tag name"}
+                        </span>
+                      </div>
+
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button id="create-tag-btn" onClick={handleCreateTag} disabled={!newTagName.trim() || tagBusy}
+                          style={{ flex: 1, padding: "8px", background: "var(--accent)", border: "none", borderRadius: 7, color: "#fff", fontSize: 13, fontWeight: 600, cursor: newTagName.trim() ? "pointer" : "default", opacity: newTagName.trim() ? 1 : 0.5 }}>
+                          Create &amp; apply
+                        </button>
+                        <button onClick={() => setShowNewTagForm(false)}
+                          style={{ padding: "8px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-muted)", fontSize: 13, cursor: "pointer" }}>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : (
-                <div style={{ background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 12 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 10 }}>Create Tag</div>
-
-                  {/* Name */}
-                  <input id="new-tag-name" autoFocus type="text" placeholder="Tag name…" value={newTagName}
-                    onChange={(e) => setNewTagName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleCreateTag(); if (e.key === "Escape") setShowNewTagForm(false); }}
-                    style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text)", padding: "8px 10px", fontSize: 13, outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
-
-                  {/* Color swatches */}
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-                    {TAG_PRESETS.map((c) => (
-                      <button key={c} onClick={() => setNewTagColor(c)}
-                        style={{ width: 22, height: 22, borderRadius: "50%", background: c, border: newTagColor === c ? "2px solid white" : "2px solid transparent", outline: newTagColor === c ? `2px solid ${c}` : "none", cursor: "pointer", padding: 0 }} />
-                    ))}
+                <>
+                  {/* Insights Tab */}
+                  <div style={{ marginBottom: 16 }}>
+                    <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--text-subtle)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Optional Note</label>
+                    <textarea 
+                      value={insightNote}
+                      onChange={e => setInsightNote(e.target.value)}
+                      placeholder="Why is this segment important?"
+                      style={{ width: "100%", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--text)", padding: "8px 10px", fontSize: 13, outline: "none", resize: "vertical", minHeight: 60, marginBottom: 16 }}
+                    />
+                    
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-subtle)", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Add to Insight</div>
+                    {projectInsights.length === 0 ? (
+                      <div style={{ fontSize: 13, color: "var(--text-muted)", fontStyle: "italic" }}>
+                        No insights created yet. Create one from the Insights page first!
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        {projectInsights.map(insight => (
+                          <button 
+                            key={insight.id}
+                            onClick={() => handleAddToInsight(insight.id)}
+                            disabled={tagBusy}
+                            style={{ padding: "10px 12px", background: "var(--surface-2)", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", textAlign: "left", transition: "border-color 0.12s" }}
+                            onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--accent)")}
+                            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+                          >
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>{insight.title}</div>
+                            {insight.description && (
+                              <div style={{ fontSize: 11, color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{insight.description}</div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-
-                  {/* Preview */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                    <span style={{ fontSize: 11, color: "var(--text-subtle)" }}>Preview:</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, padding: "2px 10px", borderRadius: 99, background: `${newTagColor}22`, border: `1px solid ${newTagColor}55`, color: newTagColor }}>
-                      {newTagName || "tag name"}
-                    </span>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button id="create-tag-btn" onClick={handleCreateTag} disabled={!newTagName.trim() || tagBusy}
-                      style={{ flex: 1, padding: "8px", background: "var(--accent)", border: "none", borderRadius: 7, color: "#fff", fontSize: 13, fontWeight: 600, cursor: newTagName.trim() ? "pointer" : "default", opacity: newTagName.trim() ? 1 : 0.5 }}>
-                      Create &amp; apply
-                    </button>
-                    <button onClick={() => setShowNewTagForm(false)}
-                      style={{ padding: "8px 10px", background: "transparent", border: "1px solid var(--border)", borderRadius: 7, color: "var(--text-muted)", fontSize: 13, cursor: "pointer" }}>
-                      ✕
-                    </button>
-                  </div>
-                </div>
+                </>
               )}
             </div>
           </aside>

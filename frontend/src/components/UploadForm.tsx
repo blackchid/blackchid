@@ -91,7 +91,7 @@ export default function UploadForm() {
         New Recording
       </h2>
       <p style={{ fontSize: 14, color: "var(--text-muted)", margin: "0 0 24px" }}>
-        Upload an audio interview and we'll automatically transcribe and diarize it.
+        Upload an audio interview and we&apos;ll automatically transcribe and diarize it.
       </p>
 
       {/* ── Project selector ─────────────────────────────── */}
