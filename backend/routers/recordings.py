@@ -1,6 +1,7 @@
 import os
 import shutil
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List
 from database import get_db
@@ -85,3 +86,35 @@ def get_transcript(recording_id: str, db: Session = Depends(get_db)):
         .all()
     )
     return segments
+
+@router.get("/recordings/{recording_id}/audio")
+def stream_audio(recording_id: str, db: Session = Depends(get_db)):
+    """
+    Stream the raw audio file for a recording so the frontend can play it.
+    FastAPI's FileResponse honours Range requests, letting WaveSurfer seek.
+    """
+    recording = db.query(Recording).filter(Recording.id == recording_id).first()
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    if not recording.storage_path or not os.path.exists(recording.storage_path):
+        raise HTTPException(status_code=404, detail="Audio file not found on disk")
+
+    # Determine MIME type from extension
+    ext = os.path.splitext(recording.storage_path)[1].lower()
+    mime_map = {
+        ".mp3": "audio/mpeg",
+        ".mp4": "audio/mp4",
+        ".m4a": "audio/mp4",
+        ".wav": "audio/wav",
+        ".ogg": "audio/ogg",
+        ".flac": "audio/flac",
+        ".webm": "audio/webm",
+    }
+    media_type = mime_map.get(ext, "audio/mpeg")
+
+    return FileResponse(
+        path=recording.storage_path,
+        media_type=media_type,
+        filename=recording.filename,
+        headers={"Accept-Ranges": "bytes"},
+    )
