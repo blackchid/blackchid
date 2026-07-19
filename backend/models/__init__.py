@@ -16,6 +16,7 @@ from .user import User                            # noqa: F401
 from .project_member import ProjectMember         # noqa: F401
 from .insight import Insight                      # noqa: F401
 from .insight_evidence import InsightEvidence     # noqa: F401
+from .pii_detection import PIIDetection           # noqa: F401
 
 __all__ = [
     "Base",
@@ -28,4 +29,5 @@ __all__ = [
     "ProjectMember",
     "Insight",
     "InsightEvidence",
+    "PIIDetection",
 ]
