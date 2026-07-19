@@ -75,6 +75,9 @@ def process_recording(recording_id: str, audio_path: str):
                     end_time=seg.get("end", 0),
                     speaker_label=seg.get("speaker", "UNKNOWN"),
                     text=seg.get("text", "").strip(),
+                    # Store WhisperX word-level timestamps for precise PII mapping.
+                    # Each entry: {"word": str, "start": float, "end": float, "score": float}
+                    word_timestamps=seg.get("words"),
                 )
             )
         

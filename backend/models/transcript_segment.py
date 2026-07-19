@@ -1,5 +1,5 @@
 from sqlalchemy import DateTime, Float, ForeignKey, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from pgvector.sqlalchemy import Vector
@@ -39,6 +39,11 @@ class TranscriptSegment(Base):
     embedding: Mapped[list[float] | None] = mapped_column(
         Vector(1536), nullable=True
     )
+
+    # WhisperX word-level timestamps — list of {word, start, end, score} dicts.
+    # NULL for segments produced before this column was added or if the
+    # alignment model was unavailable for the recording's language.
+    word_timestamps: Mapped[list | None] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[float] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
