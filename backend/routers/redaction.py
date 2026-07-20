@@ -40,6 +40,7 @@ from routers.auth import get_current_user
 from services.audio_redaction import redact_audio, _merge_ranges
 from services.permissions import require_recording_role
 from services.pii_timing import char_offset_to_time
+from services.video_redaction import redact_video, _has_video_stream
 
 router = APIRouter(tags=["redaction"])
 
@@ -242,11 +243,18 @@ def redact_recording(
     output_path = str(src.parent / f"{src.stem}_redacted{src.suffix}")
 
     try:
-        redacted_path = redact_audio(
-            input_path=recording.storage_path,
-            time_ranges=time_ranges,
-            output_path=output_path,
-        )
+        if _has_video_stream(recording.storage_path):
+            redacted_path = redact_video(
+                input_path=recording.storage_path,
+                time_ranges=time_ranges,
+                output_path=output_path,
+            )
+        else:
+            redacted_path = redact_audio(
+                input_path=recording.storage_path,
+                time_ranges=time_ranges,
+                output_path=output_path,
+            )
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
