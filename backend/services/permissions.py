@@ -56,3 +56,21 @@ def require_insight_role(db: Session, user: User, insight_id: str, allowed_roles
     if not insight:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Insight not found")
     return require_project_role(db, user, str(insight.project_id), allowed_roles)
+
+
+def require_consent(recording: Recording, consent_type: str) -> None:
+    """
+    Ensures the recording has the specified consent flag set to True.
+    Raises a specific 403 Forbidden with the missing consent name.
+    
+    consent_type should be one of:
+      - 'recording'
+      - 'external_sharing'
+      - 'ai_processing'
+    """
+    field_name = f"consent_{consent_type}"
+    if not getattr(recording, field_name, False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Action blocked: Missing participant consent for {consent_type}"
+        )

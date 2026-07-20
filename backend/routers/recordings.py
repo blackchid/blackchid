@@ -1,6 +1,6 @@
 import os
 import shutil
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List
@@ -16,7 +16,7 @@ from models.pii_detection import PIIDetection
 from models.insight_evidence import InsightEvidence
 from pathlib import Path
 from routers.auth import get_current_user
-from schemas.recording import RecordingResponse, TranscriptSegmentResponse
+from schemas.recording import RecordingResponse, TranscriptSegmentResponse, RecordingConsentUpdate
 from schemas.tag import TagApplicationDetail
 from services.permissions import require_project_role, require_recording_role
 from services.transcription import process_recording
@@ -30,6 +30,9 @@ def upload_recording(
     project_id: str,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    consent_recording: bool = Form(False),
+    consent_external_sharing: bool = Form(False),
+    consent_ai_processing: bool = Form(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -47,7 +50,10 @@ def upload_recording(
     recording = Recording(
         project_id=project_id,
         filename=file.filename or "unknown",
-        status="pending"
+        status="pending",
+        consent_recording=consent_recording,
+        consent_external_sharing=consent_external_sharing,
+        consent_ai_processing=consent_ai_processing
     )
     db.add(recording)
     db.flush() # flush to get the ID without fully committing yet
@@ -72,6 +78,33 @@ def upload_recording(
     # Queue the background task
     background_tasks.add_task(process_recording, recording.id, file_path)
 
+    return recording
+
+@router.patch("/recordings/{recording_id}/consent", response_model=RecordingResponse)
+def update_recording_consent(
+    recording_id: str,
+    body: RecordingConsentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Update consent flags for a recording.
+    Requires editor role.
+    """
+    require_recording_role(db, current_user, recording_id, ["editor"])
+    recording = db.query(Recording).filter(Recording.id == recording_id).first()
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+
+    if body.consent_recording is not None:
+        recording.consent_recording = body.consent_recording
+    if body.consent_external_sharing is not None:
+        recording.consent_external_sharing = body.consent_external_sharing
+    if body.consent_ai_processing is not None:
+        recording.consent_ai_processing = body.consent_ai_processing
+
+    db.commit()
+    db.refresh(recording)
     return recording
 
 @router.get("/recordings/{recording_id}", response_model=RecordingResponse)

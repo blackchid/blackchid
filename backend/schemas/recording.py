@@ -9,9 +9,18 @@ class RecordingResponse(BaseModel):
     status: str
     created_at: datetime
     updated_at: datetime
+    
+    consent_recording: bool
+    consent_external_sharing: bool
+    consent_ai_processing: bool
 
     class Config:
         from_attributes = True
+
+class RecordingConsentUpdate(BaseModel):
+    consent_recording: bool | None = None
+    consent_external_sharing: bool | None = None
+    consent_ai_processing: bool | None = None
 
 class TranscriptSegmentResponse(BaseModel):
     id: str
