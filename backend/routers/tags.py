@@ -9,10 +9,11 @@ import json
 from database import get_db
 from models.tag import Tag
 from models.tag_application import TagApplication
+from models.ai_tag_suggestion import AITagSuggestion
 from models.user import User
 from models.transcript_segment import TranscriptSegment
 from routers.auth import get_current_user
-from schemas.tag import TagCreate, TagResponse, TagApply, TagApplicationResponse, TagSuggestRequest, TagSuggestResponse
+from schemas.tag import TagCreate, TagResponse, TagApply, TagApplicationResponse, TagSuggestRequest, TagSuggestResponse, AITagSuggestionResponse
 from services.permissions import require_project_role, require_tag_role
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://127.0.0.1:11434")
@@ -159,18 +160,122 @@ Context:
             
             # Since we requested format: json, it should be parsable
             try:
-                suggestions = json.loads(response_text)
-                if not isinstance(suggestions, list):
-                    suggestions = []
+                raw_suggestions = json.loads(response_text)
+                if not isinstance(raw_suggestions, list):
+                    raw_suggestions = []
                 # Ensure they are all strings
-                suggestions = [str(s).lower() for s in suggestions]
+                raw_suggestions = [str(s).lower() for s in raw_suggestions]
             except json.JSONDecodeError:
-                suggestions = []
+                raw_suggestions = []
                 
-            return TagSuggestResponse(suggestions=suggestions[:5])
+            # Create DB records for each suggestion
+            db_suggestions = []
+            for tag_name in raw_suggestions[:5]:
+                # check if it already exists as a pending suggestion to prevent exact dupes
+                existing = db.query(AITagSuggestion).filter(
+                    AITagSuggestion.project_id == project_id,
+                    AITagSuggestion.segment_id == request.segment_id,
+                    AITagSuggestion.suggested_name == tag_name,
+                    AITagSuggestion.status == "pending"
+                ).first()
+                if not existing:
+                    new_sugg = AITagSuggestion(
+                        project_id=project_id,
+                        segment_id=request.segment_id,
+                        suggested_name=tag_name,
+                        status="pending"
+                    )
+                    db.add(new_sugg)
+                    db_suggestions.append(new_sugg)
+            
+            if db_suggestions:
+                db.commit()
+                for s in db_suggestions:
+                    db.refresh(s)
+                
+            return TagSuggestResponse(suggestions=db_suggestions)
             
     except httpx.RequestError as e:
         raise HTTPException(
             status_code=503, 
             detail=f"Failed to connect to local AI service. Ensure Ollama is running at {OLLAMA_BASE_URL}. Error: {str(e)}"
         )
+
+@router.get("/projects/{project_id}/tags/suggestions", response_model=List[AITagSuggestionResponse])
+def get_pending_suggestions(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """List all pending AI tag suggestions for a project."""
+    require_project_role(db, current_user, project_id, ["editor", "viewer"])
+    return db.query(AITagSuggestion).filter(
+        AITagSuggestion.project_id == project_id,
+        AITagSuggestion.status == "pending"
+    ).all()
+
+@router.post("/tags/suggestions/{suggestion_id}/accept", response_model=TagApplicationResponse)
+def accept_suggestion(
+    suggestion_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Accept an AI tag suggestion.
+    Creates a new Tag (if it doesn't exist) and creates a TagApplication.
+    """
+    suggestion = db.query(AITagSuggestion).filter(AITagSuggestion.id == suggestion_id).first()
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+        
+    require_project_role(db, current_user, suggestion.project_id, ["editor"])
+    
+    if suggestion.status != "pending":
+        raise HTTPException(status_code=400, detail="Suggestion is not pending")
+        
+    # Check if Tag exists
+    tag = db.query(Tag).filter(
+        Tag.project_id == suggestion.project_id,
+        Tag.name == suggestion.suggested_name
+    ).first()
+    
+    if not tag:
+        tag = Tag(project_id=suggestion.project_id, name=suggestion.suggested_name)
+        db.add(tag)
+        db.flush()
+        
+    # Create TagApplication
+    tag_app = TagApplication(
+        tag_id=tag.id,
+        segment_id=suggestion.segment_id,
+        note="AI Suggested"
+    )
+    db.add(tag_app)
+    
+    suggestion.status = "accepted"
+    
+    try:
+        db.commit()
+        db.refresh(tag_app)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Tag already applied to this segment")
+        
+    return tag_app
+
+@router.post("/tags/suggestions/{suggestion_id}/reject")
+def reject_suggestion(
+    suggestion_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Reject an AI tag suggestion."""
+    suggestion = db.query(AITagSuggestion).filter(AITagSuggestion.id == suggestion_id).first()
+    if not suggestion:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+        
+    require_project_role(db, current_user, suggestion.project_id, ["editor"])
+    
+    suggestion.status = "rejected"
+    db.commit()
+    return {"status": "success"}

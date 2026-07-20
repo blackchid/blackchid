@@ -46,5 +46,16 @@ class TagApplicationDetail(BaseModel):
 class TagSuggestRequest(BaseModel):
     segment_id: str
 
+class AITagSuggestionResponse(BaseModel):
+    id: str
+    project_id: str
+    segment_id: str
+    suggested_name: str
+    status: str
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
 class TagSuggestResponse(BaseModel):
-    suggestions: list[str]
+    suggestions: list[AITagSuggestionResponse]

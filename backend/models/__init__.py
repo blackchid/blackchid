@@ -20,6 +20,7 @@ from .pii_detection import PIIDetection           # noqa: F401
 from .audit_log import AuditLog                   # noqa: F401
 from .personal_access_token import PersonalAccessToken # noqa: F401
 from .clipped_evidence import ClippedEvidence     # noqa: F401
+from .ai_tag_suggestion import AITagSuggestion    # noqa: F401
 __all__ = [
     "Base",
     "Project",
