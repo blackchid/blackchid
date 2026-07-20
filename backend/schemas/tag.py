@@ -44,7 +44,7 @@ class TagApplicationDetail(BaseModel):
         from_attributes = True
 
 class TagSuggestRequest(BaseModel):
-    text: str
+    segment_id: str
 
 class TagSuggestResponse(BaseModel):
     suggestions: list[str]

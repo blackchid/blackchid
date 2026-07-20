@@ -10,6 +10,7 @@ from database import get_db
 from models.tag import Tag
 from models.tag_application import TagApplication
 from models.user import User
+from models.transcript_segment import TranscriptSegment
 from routers.auth import get_current_user
 from schemas.tag import TagCreate, TagResponse, TagApply, TagApplicationResponse, TagSuggestRequest, TagSuggestResponse
 from services.permissions import require_project_role, require_tag_role
@@ -90,14 +91,52 @@ async def suggest_tags(
 ):
     """
     Suggest tags for a given transcript segment using a local Ollama instance.
+    Fetches the surrounding conversational context for better accuracy.
     Requires editor or viewer permissions on the project.
     """
     require_project_role(db, current_user, project_id, ["editor", "viewer"])
     
-    prompt = f"""You are an expert UX Researcher. Analyze the following transcript segment and provide 3-5 concise, specific tags that categorize the user's feedback or behavior. 
+    # 1. Fetch the target segment
+    target_segment = db.query(TranscriptSegment).filter(
+        TranscriptSegment.id == request.segment_id
+    ).first()
+    
+    if not target_segment:
+        raise HTTPException(status_code=404, detail="Segment not found")
+        
+    # 2. Fetch context segments (same recording, ordered by time)
+    all_segments = db.query(TranscriptSegment).filter(
+        TranscriptSegment.recording_id == target_segment.recording_id
+    ).order_by(TranscriptSegment.start_time).all()
+    
+    # Find index of target
+    target_idx = 0
+    for i, seg in enumerate(all_segments):
+        if seg.id == target_segment.id:
+            target_idx = i
+            break
+            
+    # Slicing context: up to 3 before, 1 after
+    start_idx = max(0, target_idx - 3)
+    end_idx = min(len(all_segments), target_idx + 2)
+    context_segments = all_segments[start_idx:end_idx]
+    
+    # 3. Format the context string
+    context_str_parts = []
+    for seg in context_segments:
+        speaker = seg.speaker_label or "Unknown Speaker"
+        prefix = "--> [TARGET] " if seg.id == target_segment.id else ""
+        context_str_parts.append(f"{prefix}{speaker}: {seg.text}")
+        
+    context_str = "\n".join(context_str_parts)
+    
+    prompt = f"""You are an expert UX Researcher. Analyze the conversational context below.
+Pay special attention to the line marked "--> [TARGET]".
+Based on the TARGET line and the surrounding context, provide 3-5 concise, specific tags that categorize the user's feedback or behavior. 
 Return ONLY a JSON array of strings (e.g. ["pricing", "ui issue"]). No markdown formatting, no explanations.
 
-Text: {request.text}
+Context:
+{context_str}
 """
     
     try:
