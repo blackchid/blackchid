@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import recordings, projects, tags, auth, insights, redaction
+from routers import recordings, projects, tags, auth, insights, redaction, pii_review
 
 app = FastAPI(title="UXR Platform API")
 
@@ -30,6 +30,7 @@ app.include_router(tags.router)
 app.include_router(auth.router)
 app.include_router(insights.router)
 app.include_router(redaction.router)
+app.include_router(pii_review.router)
 
 
 @app.get("/health")

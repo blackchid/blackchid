@@ -110,10 +110,16 @@ def stream_audio(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Stream the raw audio file for a recording so the frontend can play it.
+    Stream the ORIGINAL (unredacted) audio file for a recording.
+
+    Access control: EDITOR ONLY.
+    Viewers should receive the redacted export via POST /recordings/{id}/redact.
+    This separation ensures the original containing PII is never exposed to
+    project members who haven't been granted full access.
+
     FastAPI's FileResponse honours Range requests, letting WaveSurfer seek.
     """
-    require_recording_role(db, current_user, recording_id, ["editor", "viewer"])
+    require_recording_role(db, current_user, recording_id, ["editor"])
     recording = db.query(Recording).filter(Recording.id == recording_id).first()
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")

@@ -89,7 +89,11 @@ def _resolve_detections(
 ) -> list[tuple[float, float]]:
     """
     For each detection ID, resolve to a (time_start, time_end) span.
-    Raises 404 if any ID doesn't exist or doesn't belong to this recording.
+
+    Enforces the review gate:
+      - Raises 404 if ID doesn't exist or doesn't belong to this recording.
+      - Raises 422 if any detection is not in 'confirmed' status.
+        (pending or dismissed detections may never be silently redacted)
     """
     time_ranges: list[tuple[float, float]] = []
 
@@ -109,6 +113,19 @@ def _resolve_detections(
             raise HTTPException(
                 status_code=404,
                 detail=f"PII detection {det_id!r} does not belong to recording {recording_id!r}",
+            )
+
+        # ── HUMAN REVIEW GATE ────────────────────────────────────────────────
+        # The API must never silently auto-redact.  Only detections that an
+        # editor has explicitly confirmed may appear in a redaction job.
+        if detection.review_status != "confirmed":
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Detection {det_id!r} has status {detection.review_status!r}. "
+                    "Only 'confirmed' detections may be redacted. "
+                    "Use PATCH /pii-detections/{id} to confirm it first."
+                ),
             )
 
         t_start, t_end = char_offset_to_time(
@@ -192,13 +209,18 @@ def redact_recording(
     """
     Produce a redacted (muted) version of the recording audio.
 
-    - Resolves each PII detection ID to a precise audio time window.
+    - All detection IDs must have review_status='confirmed' (422 otherwise).
+    - Resolves confirmed detections → precise audio time windows.
     - Merges overlapping windows.
-    - Runs FFmpeg to mute those windows.
+    - Runs FFmpeg to produce a muted copy of the file.
     - Streams the resulting file back as a download.
 
-    The original file is not modified.
-    Requires editor role.
+    Access control:
+      - Creating/running the redaction job: EDITOR only.
+      - The output file (muted audio) is safe to share broadly; viewers may
+        download it via GET /recordings/{id}/redacted-audio once produced.
+
+    The original file is NOT modified.
     """
     require_recording_role(db, current_user, recording_id, ["editor"])
 
@@ -248,3 +270,59 @@ def redact_recording(
         filename=download_name,
         headers={"Content-Disposition": f'attachment; filename="{download_name}"'},
     )
+
+
+@router.get("/recordings/{recording_id}/redacted-audio")
+def stream_redacted_audio(
+    recording_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Stream the redacted (PII-muted) audio file for a recording.
+
+    Access control: EDITOR AND VIEWER.
+    Unlike the original /audio endpoint which is editor-only, the redacted
+    export contains no PII and is safe to share with all project members.
+
+    Returns 404 if no redacted file has been produced yet for this recording.
+    Editors produce it via POST /recordings/{id}/redact.
+    """
+    require_recording_role(db, current_user, recording_id, ["editor", "viewer"])
+
+    recording = db.query(Recording).filter(Recording.id == recording_id).first()
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    if not recording.storage_path:
+        raise HTTPException(status_code=404, detail="No audio on disk for this recording")
+
+    # Convention: redacted file is <original_stem>_redacted<ext>
+    src = Path(recording.storage_path)
+    redacted_path = str(src.parent / f"{src.stem}_redacted{src.suffix}")
+
+    if not os.path.exists(redacted_path):
+        raise HTTPException(
+            status_code=404,
+            detail="No redacted version found for this recording. "
+                   "An editor must run POST /recordings/{id}/redact first.",
+        )
+
+    ext = src.suffix.lower()
+    mime_map = {
+        ".mp3": "audio/mpeg",
+        ".wav": "audio/wav",
+        ".flac": "audio/flac",
+        ".m4a": "audio/mp4",
+        ".ogg": "audio/ogg",
+        ".webm": "audio/webm",
+    }
+    media_type = mime_map.get(ext, "audio/mpeg")
+
+    download_name = f"{src.stem}_redacted{ext}"
+    return FileResponse(
+        path=redacted_path,
+        media_type=media_type,
+        filename=download_name,
+        headers={"Accept-Ranges": "bytes"},
+    )
+
