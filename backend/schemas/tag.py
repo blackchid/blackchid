@@ -42,3 +42,9 @@ class TagApplicationDetail(BaseModel):
 
     class Config:
         from_attributes = True
+
+class TagSuggestRequest(BaseModel):
+    text: str
+
+class TagSuggestResponse(BaseModel):
+    suggestions: list[str]
