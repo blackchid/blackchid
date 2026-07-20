@@ -5,6 +5,9 @@ from sqlalchemy.orm import Session
 from models.recording import Recording
 from models.transcript_segment import TranscriptSegment
 from database import SessionLocal
+import whisperx
+from pyannote.audio import Pipeline as DiarizationPipeline
+from services.embeddings import generate_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +85,13 @@ def process_recording(recording_id: str, audio_path: str):
             )
         
         if db_segments:
+            logger.info("Generating embeddings for transcript segments...")
+            texts = [seg.text for seg in db_segments]
+            embeddings = generate_embeddings(texts)
+            for i, seg in enumerate(db_segments):
+                if i < len(embeddings) and embeddings[i]:
+                    seg.embedding = embeddings[i]
+            
             db.bulk_save_objects(db_segments)
             # Update duration based on the last segment's end time
             recording.duration_seconds = max([s.end_time for s in db_segments])

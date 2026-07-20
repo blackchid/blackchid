@@ -34,10 +34,10 @@ class TranscriptSegment(Base):
     speaker_label: Mapped[str | None] = mapped_column(Text, nullable=True)
     text: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # pgvector column — 1536 dims (matches OpenAI text-embedding-3-small)
+    # pgvector column — 384 dims (matches sentence-transformers/all-MiniLM-L6-v2)
     # NULL until an embedding job processes this segment
     embedding: Mapped[list[float] | None] = mapped_column(
-        Vector(1536), nullable=True
+        Vector(384), nullable=True
     )
 
     # WhisperX word-level timestamps — list of {word, start, end, score} dicts.
