@@ -40,6 +40,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
+from models.audit_log import AuditLog
 from models.pii_detection import PIIDetection
 from models.recording import Recording
 from models.transcript_segment import TranscriptSegment
@@ -186,6 +187,20 @@ def scan_for_pii(
         .count()
     )
 
+    if new_detections > 0:
+        audit_entry = AuditLog(
+            recording_id=recording_id,
+            user_id=current_user.id,
+            action="pii_scan_run",
+            details={
+                "segments_scanned": segments_scanned,
+                "new_detections": new_detections,
+                "total_pending": total_pending,
+            }
+        )
+        db.add(audit_entry)
+        db.commit()
+
     return ScanResponse(
         recording_id=recording_id,
         segments_scanned=segments_scanned,
@@ -260,6 +275,21 @@ def review_detection(
     new_status = "confirmed" if body.action == "confirm" else "dismissed"
     detection.review_status = new_status
     detection.reviewed_by = current_user.id
+    
+    audit_entry = AuditLog(
+        recording_id=segment.recording_id,
+        user_id=current_user.id,
+        action=f"pii_detection_{new_status}",
+        details={
+            "detection_id": detection.id,
+            "entity_type": detection.entity_type,
+            "start_char": detection.start_char,
+            "end_char": detection.end_char,
+            "matched_text": segment.text[detection.start_char:detection.end_char],
+        }
+    )
+    db.add(audit_entry)
+    
     db.commit()
     db.refresh(detection)
 
@@ -285,5 +315,42 @@ def delete_detection(
     ).first()
     require_recording_role(db, current_user, segment.recording_id, ["editor"])
 
+    audit_entry = AuditLog(
+        recording_id=segment.recording_id,
+        user_id=current_user.id,
+        action="pii_detection_deleted",
+        details={
+            "detection_id": detection.id,
+            "entity_type": detection.entity_type,
+            "matched_text": segment.text[detection.start_char:detection.end_char],
+        }
+    )
+    db.add(audit_entry)
+    
     db.delete(detection)
     db.commit()
+
+@router.get("/recordings/{recording_id}/audit-log")
+def get_audit_log(
+    recording_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retrieve the immutable audit trail for a recording's redaction/PII lifecycle.
+    Both editors and viewers may read this to prove due diligence.
+    """
+    require_recording_role(db, current_user, recording_id, ["editor", "viewer"])
+
+    recording = db.query(Recording).filter(Recording.id == recording_id).first()
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.recording_id == recording_id)
+        .order_by(AuditLog.created_at.desc())
+        .all()
+    )
+    return logs
+

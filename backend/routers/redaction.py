@@ -32,6 +32,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import get_db
+from models.audit_log import AuditLog
 from models.pii_detection import PIIDetection
 from models.recording import Recording
 from models.transcript_segment import TranscriptSegment
@@ -257,6 +258,20 @@ def redact_recording(
             )
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+    # Log successful execution
+    audit_entry = AuditLog(
+        recording_id=recording_id,
+        user_id=current_user.id,
+        action="redaction_executed",
+        details={
+            "pii_detection_ids": body.pii_detection_ids,
+            "padding_seconds": body.padding_seconds,
+            "time_ranges": time_ranges,
+        }
+    )
+    db.add(audit_entry)
+    db.commit()
 
     # Determine MIME type
     ext = Path(redacted_path).suffix.lower()
