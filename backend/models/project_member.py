@@ -11,19 +11,19 @@ class ProjectMember(Base):
     __tablename__ = "project_members"
 
     id = Column(
-        UUID(as_uuid=True),
+        UUID(as_uuid=False),
         primary_key=True,
         default=uuid.uuid4,
         nullable=False,
     )
     project_id = Column(
-        UUID(as_uuid=True),
+        UUID(as_uuid=False),
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     user_id = Column(
-        UUID(as_uuid=True),
+        UUID(as_uuid=False),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,

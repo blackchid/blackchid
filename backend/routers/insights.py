@@ -7,6 +7,7 @@ from database import get_db
 from models.insight import Insight
 from models.insight_evidence import InsightEvidence
 from models.transcript_segment import TranscriptSegment
+from models.clipped_evidence import ClippedEvidence
 from models.user import User
 from routers.auth import get_current_user
 from schemas.insight import (
@@ -72,7 +73,10 @@ def get_insight(
     
     evidence = db.query(InsightEvidence).filter(InsightEvidence.insight_id == insight.id).all()
     for ev in evidence:
-        ev.segment = db.query(TranscriptSegment).filter(TranscriptSegment.id == ev.segment_id).first()
+        if ev.segment_id:
+            ev.segment = db.query(TranscriptSegment).filter(TranscriptSegment.id == ev.segment_id).first()
+        elif ev.clip_id:
+            ev.clip = db.query(ClippedEvidence).filter(ClippedEvidence.id == ev.clip_id).first()
     insight.evidence = evidence
     
     return insight
@@ -97,7 +101,10 @@ def update_insight(
     
     evidence = db.query(InsightEvidence).filter(InsightEvidence.insight_id == insight.id).all()
     for ev in evidence:
-        ev.segment = db.query(TranscriptSegment).filter(TranscriptSegment.id == ev.segment_id).first()
+        if ev.segment_id:
+            ev.segment = db.query(TranscriptSegment).filter(TranscriptSegment.id == ev.segment_id).first()
+        elif ev.clip_id:
+            ev.clip = db.query(ClippedEvidence).filter(ClippedEvidence.id == ev.clip_id).first()
     insight.evidence = evidence
     
     return insight
@@ -126,9 +133,15 @@ def add_evidence(
 ):
     require_insight_role(db, current_user, insight_id, ["editor"])
     
+    if not evidence.segment_id and not evidence.clip_id:
+        raise HTTPException(status_code=400, detail="Must provide either segment_id or clip_id")
+    if evidence.segment_id and evidence.clip_id:
+        raise HTTPException(status_code=400, detail="Cannot provide both segment_id and clip_id")
+
     db_ev = InsightEvidence(
         insight_id=insight_id,
         segment_id=evidence.segment_id,
+        clip_id=evidence.clip_id,
         note=evidence.note
     )
     db.add(db_ev)
@@ -137,22 +150,26 @@ def add_evidence(
         db.refresh(db_ev)
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="Evidence already attached or invalid segment")
+        raise HTTPException(status_code=400, detail="Evidence already attached or invalid source ID")
         
-    db_ev.segment = db.query(TranscriptSegment).filter(TranscriptSegment.id == db_ev.segment_id).first()
+    if db_ev.segment_id:
+        db_ev.segment = db.query(TranscriptSegment).filter(TranscriptSegment.id == db_ev.segment_id).first()
+    elif db_ev.clip_id:
+        db_ev.clip = db.query(ClippedEvidence).filter(ClippedEvidence.id == db_ev.clip_id).first()
+        
     return db_ev
 
-@router.delete("/insights/{insight_id}/evidence/{segment_id}")
+@router.delete("/insights/{insight_id}/evidence/{evidence_id}")
 def remove_evidence(
     insight_id: str,
-    segment_id: str,
+    evidence_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     require_insight_role(db, current_user, insight_id, ["editor"])
     ev = db.query(InsightEvidence).filter(
         InsightEvidence.insight_id == insight_id,
-        InsightEvidence.segment_id == segment_id
+        InsightEvidence.id == evidence_id
     ).first()
     if not ev:
         raise HTTPException(status_code=404, detail="Evidence not found")

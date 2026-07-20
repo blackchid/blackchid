@@ -25,8 +25,12 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models.user import User
+from models.personal_access_token import PersonalAccessToken
 from schemas.user import TokenResponse, UserCreate, UserRead, UserUpdate
+from schemas.personal_access_token import PATCreate, PATResponse, PATCreateResponse
 from services.auth_utils import create_access_token, hash_password, verify_password
+import secrets
+import hashlib
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -57,12 +61,19 @@ def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    user_id = None
     try:
         payload = decode_token(token)
-        user_id: str | None = payload.get("sub")
-        if user_id is None:
-            raise credentials_error
+        user_id = payload.get("sub")
     except JWTError:
+        # Fallback to checking if it's a Personal Access Token
+        if token.startswith("bc_pat_"):
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            pat = db.query(PersonalAccessToken).filter(PersonalAccessToken.token_hash == token_hash).first()
+            if pat:
+                user_id = pat.user_id
+
+    if user_id is None:
         raise credentials_error
 
     user = db.query(User).filter(User.id == user_id).first()
@@ -157,3 +168,60 @@ def update_me(
     db.commit()
     db.refresh(current_user)
     return current_user
+
+# ── PAT Management ────────────────────────────────────────────────────────────
+
+@router.post("/pat", response_model=PATCreateResponse, status_code=status.HTTP_201_CREATED)
+def create_pat(
+    body: PATCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate a new Personal Access Token for the current user.
+    The plain text token is returned exactly once.
+    """
+    # Generate 32 bytes of randomness and format it
+    raw_token = f"bc_pat_{secrets.token_hex(32)}"
+    token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+    
+    pat = PersonalAccessToken(
+        user_id=current_user.id,
+        name=body.name,
+        token_hash=token_hash
+    )
+    db.add(pat)
+    db.commit()
+    db.refresh(pat)
+    
+    return PATCreateResponse(
+        id=str(pat.id),
+        name=pat.name,
+        created_at=pat.created_at,
+        token=raw_token
+    )
+
+@router.get("/pat", response_model=list[PATResponse])
+def list_pats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List all active Personal Access Tokens for the current user."""
+    return db.query(PersonalAccessToken).filter(PersonalAccessToken.user_id == current_user.id).all()
+
+@router.delete("/pat/{pat_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_pat(
+    pat_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Revoke a Personal Access Token."""
+    pat = db.query(PersonalAccessToken).filter(
+        PersonalAccessToken.id == pat_id, 
+        PersonalAccessToken.user_id == current_user.id
+    ).first()
+    if not pat:
+        raise HTTPException(status_code=404, detail="Token not found")
+    
+    db.delete(pat)
+    db.commit()
