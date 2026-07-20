@@ -189,6 +189,7 @@ def scan_for_pii(
 
     if new_detections > 0:
         audit_entry = AuditLog(
+            project_id=recording.project_id,
             recording_id=recording_id,
             user_id=current_user.id,
             action="pii_scan_run",
@@ -276,7 +277,11 @@ def review_detection(
     detection.review_status = new_status
     detection.reviewed_by = current_user.id
     
+    # Fetch recording to get project_id
+    recording = db.query(Recording).filter(Recording.id == segment.recording_id).first()
+    
     audit_entry = AuditLog(
+        project_id=recording.project_id,
         recording_id=segment.recording_id,
         user_id=current_user.id,
         action=f"pii_detection_{new_status}",
@@ -315,7 +320,11 @@ def delete_detection(
     ).first()
     require_recording_role(db, current_user, segment.recording_id, ["editor"])
 
+    # Fetch recording to get project_id
+    recording = db.query(Recording).filter(Recording.id == segment.recording_id).first()
+
     audit_entry = AuditLog(
+        project_id=recording.project_id,
         recording_id=segment.recording_id,
         user_id=current_user.id,
         action="pii_detection_deleted",
@@ -339,18 +348,24 @@ def get_audit_log(
     """
     Retrieve the immutable audit trail for a recording's redaction/PII lifecycle.
     Both editors and viewers may read this to prove due diligence.
+    Since the recording might be deleted, we authorize via the project_id on the logs.
     """
-    require_recording_role(db, current_user, recording_id, ["editor", "viewer"])
-
-    recording = db.query(Recording).filter(Recording.id == recording_id).first()
-    if not recording:
-        raise HTTPException(status_code=404, detail="Recording not found")
-
+    # Fetch logs first to get project_id
     logs = (
         db.query(AuditLog)
         .filter(AuditLog.recording_id == recording_id)
         .order_by(AuditLog.created_at.desc())
         .all()
     )
+    
+    if not logs:
+        # If no logs, fallback to checking if recording exists to authorize
+        require_recording_role(db, current_user, recording_id, ["editor", "viewer"])
+        return []
+        
+    # Check permissions against the project found in the first log
+    from services.permissions import require_project_role
+    require_project_role(db, current_user, str(logs[0].project_id), ["editor", "viewer"])
+
     return logs
 

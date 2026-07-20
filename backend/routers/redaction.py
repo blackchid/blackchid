@@ -261,6 +261,7 @@ def redact_recording(
 
     # Log successful execution
     audit_entry = AuditLog(
+        project_id=recording.project_id,
         recording_id=recording_id,
         user_id=current_user.id,
         action="redaction_executed",

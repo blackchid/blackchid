@@ -11,6 +11,10 @@ from models.tag import Tag
 from models.tag_application import TagApplication
 from models.transcript_segment import TranscriptSegment
 from models.user import User
+from models.audit_log import AuditLog
+from models.pii_detection import PIIDetection
+from models.insight_evidence import InsightEvidence
+from pathlib import Path
 from routers.auth import get_current_user
 from schemas.recording import RecordingResponse, TranscriptSegmentResponse
 from schemas.tag import TagApplicationDetail
@@ -136,6 +140,7 @@ def stream_audio(
         ".ogg": "audio/ogg",
         ".flac": "audio/flac",
         ".webm": "audio/webm",
+        ".mov": "video/quicktime",
     }
     media_type = mime_map.get(ext, "audio/mpeg")
 
@@ -145,6 +150,94 @@ def stream_audio(
         filename=recording.filename,
         headers={"Accept-Ranges": "bytes"},
     )
+
+@router.delete("/recordings/{recording_id}")
+def delete_recording(
+    recording_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Completely and verifiably erase a recording and all derived data.
+    Includes media files, transcript segments, tag applications, PII detections,
+    and insight evidence. Leaves an immutable audit log entry.
+    Requires editor role.
+    """
+    require_recording_role(db, current_user, recording_id, ["editor"])
+    recording = db.query(Recording).filter(Recording.id == recording_id).first()
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+
+    # Count derived entities for the audit log summary
+    segments_count = db.query(TranscriptSegment).filter(TranscriptSegment.recording_id == recording_id).count()
+    
+    tags_count = (
+        db.query(TagApplication)
+        .join(TranscriptSegment)
+        .filter(TranscriptSegment.recording_id == recording_id)
+        .count()
+    )
+    
+    pii_count = (
+        db.query(PIIDetection)
+        .join(TranscriptSegment)
+        .filter(TranscriptSegment.recording_id == recording_id)
+        .count()
+    )
+    
+    evidence_count = (
+        db.query(InsightEvidence)
+        .join(TranscriptSegment)
+        .filter(TranscriptSegment.recording_id == recording_id)
+        .count()
+    )
+
+    # Note files to delete
+    files_to_delete = []
+    if recording.storage_path:
+        files_to_delete.append(recording.storage_path)
+        # Redacted file convention: stem_redacted.ext
+        src = Path(recording.storage_path)
+        redacted_path = str(src.parent / f"{src.stem}_redacted{src.suffix}")
+        files_to_delete.append(redacted_path)
+
+    # Log the erasure action BEFORE deleting the database records
+    summary = {
+        "recording_id": recording_id,
+        "segments_deleted": segments_count,
+        "tag_applications_deleted": tags_count,
+        "pii_detections_deleted": pii_count,
+        "insight_evidence_deleted": evidence_count,
+        "files_targeted": files_to_delete
+    }
+
+    audit_entry = AuditLog(
+        project_id=recording.project_id,
+        recording_id=recording_id,
+        user_id=current_user.id,
+        action="recording_erased",
+        details=summary
+    )
+    db.add(audit_entry)
+    db.commit()
+
+    # Delete files from disk
+    files_deleted = 0
+    for fpath in files_to_delete:
+        if os.path.exists(fpath):
+            try:
+                os.unlink(fpath)
+                files_deleted += 1
+            except Exception:
+                pass
+
+    summary["files_deleted"] = files_deleted
+
+    # Delete the recording (cascades to segments, tags, pii, and evidence)
+    db.delete(recording)
+    db.commit()
+
+    return summary
 
 @router.get("/recordings/{recording_id}/tag-applications", response_model=List[TagApplicationDetail])
 def get_recording_tag_applications(
