@@ -14,3 +14,16 @@ class ProjectResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class SegmentSearchMatch(BaseModel):
+    segment_id: str
+    recording_id: str
+    speaker_label: str | None
+    text: str
+    start_time: float
+    end_time: float
+    similarity_score: float
+    
+class SearchResponse(BaseModel):
+    query: str
+    results: list[SegmentSearchMatch]
