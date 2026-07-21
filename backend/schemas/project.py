@@ -27,3 +27,6 @@ class SegmentSearchMatch(BaseModel):
 class SearchResponse(BaseModel):
     query: str
     results: list[SegmentSearchMatch]
+
+class ReelExportRequest(BaseModel):
+    segment_ids: list[str]

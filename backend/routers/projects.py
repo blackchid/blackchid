@@ -1,6 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List
+import os
+import uuid
 
 from database import get_db
 from models.project import Project
@@ -11,7 +14,7 @@ from models.tag_application import TagApplication
 from models.transcript_segment import TranscriptSegment
 from models.user import User
 from routers.auth import get_current_user
-from schemas.project import ProjectCreate, ProjectResponse, SearchResponse
+from schemas.project import ProjectCreate, ProjectResponse, SearchResponse, ReelExportRequest
 from schemas.recording import RecordingResponse, TranscriptSegmentResponse
 from schemas.tag import TagResponse
 from services.permissions import require_project_role
@@ -152,3 +155,77 @@ def semantic_search(
         })
         
     return SearchResponse(query=q, results=matches)
+
+from services.ffmpeg_utils import create_highlight_reel
+
+@router.post("/projects/{project_id}/export-reel")
+def export_highlight_reel(
+    project_id: str,
+    request: ReelExportRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Export a highlight reel of requested segment IDs.
+    Returns the concatenated MP4 video file.
+    """
+    require_project_role(db, current_user, project_id, ["editor", "viewer"])
+    
+    if not request.segment_ids:
+        raise HTTPException(status_code=400, detail="No segments provided")
+        
+    # Fetch all requested segments
+    segments = db.query(TranscriptSegment).filter(
+        TranscriptSegment.id.in_(request.segment_ids)
+    ).all()
+    
+    if len(segments) != len(request.segment_ids):
+        raise HTTPException(status_code=404, detail="One or more segments not found")
+        
+    # Validate project ownership and consent
+    segments_data = []
+    for seg in segments:
+        recording = db.query(Recording).filter(Recording.id == seg.recording_id).first()
+        if recording.project_id != project_id:
+            raise HTTPException(status_code=403, detail="Segments must belong to the specified project")
+            
+        if not recording.consent_external_sharing:
+            raise HTTPException(
+                status_code=403, 
+                detail=f"Cannot export reel: Recording '{recording.filename}' lacks external sharing consent."
+            )
+            
+        if not recording.storage_path or not os.path.exists(recording.storage_path):
+            raise HTTPException(status_code=500, detail=f"Source media missing for segment {seg.id}")
+            
+        segments_data.append({
+            "filepath": recording.storage_path,
+            "start": seg.start_time,
+            "end": seg.end_time
+        })
+        
+    # Sort segments_data to match requested order if needed, but for simplicity
+    # we just generate them in the order they were provided in the request
+    ordered_segments_data = []
+    seg_dict = {str(seg.id): data for seg, data in zip(segments, segments_data)}
+    for sid in request.segment_ids:
+        ordered_segments_data.append(seg_dict[sid])
+        
+    # Generate temporary output path
+    output_filename = f"reel_{uuid.uuid4().hex[:8]}.mp4"
+    output_path = os.path.join(os.getcwd(), "uploads", output_filename)
+    
+    try:
+        create_highlight_reel(ordered_segments_data, output_path)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate reel: {str(e)}")
+        
+    # Clean up the final file after returning it
+    background_tasks.add_task(lambda: os.remove(output_path) if os.path.exists(output_path) else None)
+    
+    return FileResponse(
+        path=output_path,
+        media_type="video/mp4",
+        filename="highlight_reel.mp4"
+    )
