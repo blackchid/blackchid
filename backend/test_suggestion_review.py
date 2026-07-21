@@ -9,6 +9,7 @@ from models.project import Project
 from models.project_member import ProjectMember
 from models.recording import Recording
 from models.transcript_segment import TranscriptSegment
+from models.ai_tag_suggestion import AITagSuggestion
 from services.auth_utils import hash_password
 import httpx
 import json
@@ -89,6 +90,27 @@ async def run_test():
         print(f"\n4. Rejecting Suggestion 2: {sugg2['suggested_name']}")
         r_rej = await client.post(f"http://127.0.0.1:8000/tags/suggestions/{sugg2['id']}/reject", headers=headers)
         print(r_rej.status_code, r_rej.json())
+        
+        print("\n5. Verifying Database State...")
+        db = SessionLocal()
+        
+        # Check AITagSuggestion table
+        s1_db = db.query(AITagSuggestion).filter(AITagSuggestion.id == sugg1["id"]).first()
+        s2_db = db.query(AITagSuggestion).filter(AITagSuggestion.id == sugg2["id"]).first()
+        print(f"Suggestion '{s1_db.suggested_name}' status: {s1_db.status}")
+        print(f"Suggestion '{s2_db.suggested_name}' status: {s2_db.status}")
+        
+        # Check TagApplication table
+        from models.tag_application import TagApplication
+        from models.tag import Tag
+        
+        apps = db.query(TagApplication).filter(TagApplication.segment_id == seg_id).all()
+        print(f"Total TagApplications for segment: {len(apps)}")
+        for app in apps:
+            tag = db.query(Tag).filter(Tag.id == app.tag_id).first()
+            print(f"  -> Applied Tag: '{tag.name}' (note: {app.note})")
+            
+        db.close()
 
 if __name__ == "__main__":
     asyncio.run(run_test())
