@@ -1,0 +1,39 @@
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--red-soft);
+  border: 1px solid var(--red-border);
+  border-radius: var(--r-lg);
+  color: var(--fg);
+  font-size: 0.8125rem;
+  animation: slideInDown var(--dur-normal) var(--ease-out) both;
+}
+
+.error-banner-icon {
+  color: var(--red);
+  flex-shrink: 0;
+}
+
+.error-banner-msg {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.error-banner-retry {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 var(--sp-3);
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--red);
+  border: 1px solid var(--red-border);
+  border-radius: var(--r-md);
+  background: transparent;
+  transition: all var(--dur-fast) var(--ease);
+}
+.error-banner-retry:hover {
+  background: var(--red-soft);
+  border-color: var(--red);
+}

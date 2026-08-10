@@ -1,0 +1,62 @@
+/* ═══ Placeholder (Coming Soon) ════════════════════════════════════════════ */
+.placeholder-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+}
+
+.placeholder-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: var(--sp-16) var(--sp-12);
+  max-width: 420px;
+}
+
+.placeholder-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-2xl);
+  background: linear-gradient(135deg, var(--bg-elevated), var(--bg-card));
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  margin-bottom: var(--sp-6);
+  box-shadow: var(--shadow-glow);
+}
+
+.placeholder-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  margin-bottom: var(--sp-3);
+  background: linear-gradient(180deg, var(--fg) 0%, #b0b0b0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.placeholder-desc {
+  font-size: 0.875rem;
+  color: var(--fg-secondary);
+  line-height: 1.6;
+  margin-bottom: var(--sp-6);
+}
+
+.placeholder-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  background-color: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: var(--r-full);
+}

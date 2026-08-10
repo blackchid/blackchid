@@ -53,6 +53,19 @@ def get_projects(
         .all()
     )
 
+@router.get("/projects/{project_id}", response_model=ProjectResponse)
+def get_project(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get a single project by ID."""
+    require_project_role(db, current_user, project_id, ["editor", "viewer"])
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
 @router.get("/projects/{project_id}/tags", response_model=List[TagResponse])
 def get_project_tags(
     project_id: str, 

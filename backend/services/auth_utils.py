@@ -24,23 +24,31 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 # ── Password hashing ──────────────────────────────────────────────────────────
-# CryptContext knows which algorithm to use and handles migration if you
-# ever switch algorithms — existing hashes keep working.
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# We use bcrypt directly instead of passlib because passlib 1.7.4 is
+# incompatible with bcrypt 5.0.0 (passlib's backend-detection test passes
+# a >72-byte string which bcrypt 5.x rejects with ValueError).
+# bcrypt truncates passwords to 72 bytes internally (NUL-terminated), which
+# is the standard bcrypt behaviour and matches what passlib did before.
 
 
 def hash_password(plain: str) -> str:
     """Return a bcrypt hash of `plain`. Store this, never the plain password."""
-    return _pwd_context.hash(plain)
+    # bcrypt requires bytes; encode the password and truncate to 72 bytes
+    # to avoid the "password cannot be longer than 72 bytes" error.
+    password_bytes = plain.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password_bytes, salt).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Return True if `plain` matches the stored `hashed` value."""
-    return _pwd_context.verify(plain, hashed)
+    password_bytes = plain.encode("utf-8")[:72]
+    hashed_bytes = hashed.encode("utf-8")
+    return bcrypt.checkpw(password_bytes, hashed_bytes)
 
 
 # ── JWT configuration ─────────────────────────────────────────────────────────
