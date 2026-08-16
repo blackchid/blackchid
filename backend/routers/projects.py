@@ -66,6 +66,26 @@ def get_project(
         raise HTTPException(status_code=404, detail="Project not found")
     return project
 
+@router.patch("/projects/{project_id}", response_model=ProjectResponse)
+def update_project(
+    project_id: str,
+    body: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update project name and/or description. Requires editor role."""
+    require_project_role(db, current_user, project_id, ["editor"])
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if "name" in body and body["name"]:
+        project.name = body["name"]
+    if "description" in body:
+        project.description = body["description"]
+    db.commit()
+    db.refresh(project)
+    return project
+
 @router.get("/projects/{project_id}/tags", response_model=List[TagResponse])
 def get_project_tags(
     project_id: str, 
@@ -242,3 +262,39 @@ def export_highlight_reel(
         media_type="video/mp4",
         filename="highlight_reel.mp4"
     )
+
+
+from models.audit_log import AuditLog
+
+@router.get("/projects/{project_id}/audit-log")
+def get_project_audit_log(
+    project_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Retrieve the full immutable audit trail for a project.
+    Both editors and viewers may read this.
+    Returns audit entries in reverse chronological order.
+    """
+    require_project_role(db, current_user, project_id, ["editor", "viewer"])
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.project_id == project_id)
+        .order_by(AuditLog.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    return [
+        {
+            "id": str(log.id),
+            "project_id": str(log.project_id),
+            "recording_id": str(log.recording_id),
+            "user_id": str(log.user_id) if log.user_id else None,
+            "action": log.action,
+            "details": log.details,
+            "created_at": log.created_at.isoformat(),
+        }
+        for log in logs
+    ]
+
