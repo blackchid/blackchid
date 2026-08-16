@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Folder, BarChart3, Zap, FileText, Clock, ArrowUpRight, Mic, TrendingUp, Users, Activity } from 'lucide-react';
+import { Plus, Folder, BarChart3, Zap, FileText, Clock, ArrowUpRight, Mic, TrendingUp, Activity } from 'lucide-react';
 import { fetchApi } from '../api';
 import { Modal, Skeleton, Spinner, ErrorBanner, useToast } from '../components';
 import './Home.css';

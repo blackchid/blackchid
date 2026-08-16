@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Search, Upload, FileVideo, Plus, MoreHorizontal, Mic, Clock, TrendingUp } from 'lucide-react';
+import { Search, Upload, FileVideo, Plus, MoreHorizontal, Mic, Clock, Shield } from 'lucide-react';
 import { fetchApi } from '../api';
 import { Badge, Spinner, EmptyState, ErrorBanner, Skeleton, useToast } from '../components';
 import './ProjectHome.css';
@@ -206,7 +206,20 @@ export default function ProjectHome() {
                     <td className="text-muted">{ago(r.created_at)}</td>
                     <td>{statusBadge(r.status)}</td>
                     <td>
-                      <button className="ph-row-more"><MoreHorizontal size={14}/></button>
+                      <div className="ph-row-actions">
+                        {r.status === 'done' && (
+                          <button
+                            className="ph-row-action-btn"
+                            title="Review PII"
+                            onClick={(e) => { e.stopPropagation(); navigate(`/projects/${projectId}/recordings/${r.id}/pii`); }}
+                          >
+                            <Shield size={13} />
+                          </button>
+                        )}
+                        <button className="ph-row-more" onClick={(e) => e.stopPropagation()}>
+                          <MoreHorizontal size={14}/>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

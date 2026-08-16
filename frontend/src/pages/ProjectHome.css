@@ -209,9 +209,32 @@
   border-radius: var(--r-md);
 }
 
-.ph-table tbody tr:hover .ph-row-more {
+.ph-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  justify-content: flex-end;
+}
+
+.ph-row-action-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: var(--r-md);
+  color: var(--fg-muted);
+  opacity: 0;
+  transition: opacity var(--dur-fast), background var(--dur-fast), color var(--dur-fast);
+  background: transparent;
+}
+
+.ph-row-action-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.ph-table tbody tr:hover .ph-row-more,
+.ph-table tbody tr:hover .ph-row-action-btn {
   opacity: 1;
-  transform: translateX(0);
 }
 
 /* ═══ Badges ══════════════════════════════════════════════════════════════ */

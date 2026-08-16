@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { Home, Search, MessageSquare, Folder, LayoutDashboard, FileText, Settings, Menu, X, ChevronRight } from 'lucide-react';
+import { Home, Folder, Settings, Menu, X, ChevronRight } from 'lucide-react';
 import { useAuth } from '../AuthContext';
 import './WorkspaceLayout.css';
 
@@ -82,8 +82,6 @@ export default function WorkspaceLayout() {
 
           <nav className="sidebar-nav" aria-label="Main navigation">
             <SidebarLink to="/" icon={<Home size={15}/>} label="Home" active={path === '/'} />
-            <SidebarLink to="/search" icon={<Search size={15}/>} label="Search" active={path === '/search'} />
-            <SidebarLink to="/chat" icon={<MessageSquare size={15}/>} label="Chat" active={path === '/chat'} />
           </nav>
 
           <div className="sidebar-divider" />
@@ -91,8 +89,6 @@ export default function WorkspaceLayout() {
           <div className="sidebar-section-label">Workspace</div>
           <nav className="sidebar-nav" aria-label="Workspace navigation">
             <SidebarLink to="/" icon={<Folder size={15}/>} label="Projects" active={path.startsWith('/projects')} />
-            <SidebarLink to="/dashboards" icon={<LayoutDashboard size={15}/>} label="Dashboards" active={path === '/dashboards'} tag="Beta" />
-            <SidebarLink to="/docs" icon={<FileText size={15}/>} label="Docs" active={path === '/docs'} />
           </nav>
         </div>
 
@@ -122,7 +118,7 @@ export default function WorkspaceLayout() {
 }
 
 function SidebarLink({ to, icon, label, active, tag }: { 
-  to: string; icon: React.ReactNode; label: string; active?: boolean; tag?: string;
+  to: string; icon: ReactNode; label: string; active?: boolean; tag?: string;
 }) {
   return (
     <Link 
