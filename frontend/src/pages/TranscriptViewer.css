@@ -269,3 +269,178 @@
 
 .text-xs { font-size: 0.6875rem; }
 .text-sm { font-size: 0.75rem; }
+
+/* ── Tag chips on segment lines ───────────────────────────────────────────── */
+.tv-seg-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: var(--sp-2);
+}
+
+.tv-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: var(--r-full);
+  border: 1px solid;
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* ── Panel tag chips ──────────────────────────────────────────────────────── */
+.tv-panel-applied-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-3);
+}
+
+/* ── Tag picker dropdown ─────────────────────────────────────────────────── */
+.tv-tag-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--sp-2);
+  margin-bottom: var(--sp-3);
+}
+
+.tv-tag-pick-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-2);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--fg-secondary);
+  font-size: 0.8125rem;
+  text-align: left;
+  transition: background var(--dur-fast), color var(--dur-fast);
+  height: auto;
+}
+.tv-tag-pick-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg);
+}
+
+.tv-tag-pick-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-full);
+  flex-shrink: 0;
+}
+
+.tv-tag-pick-cancel {
+  margin-top: 4px;
+  padding: var(--sp-1) var(--sp-2);
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  background: transparent;
+  height: auto;
+  text-align: left;
+  border-top: 1px solid var(--border);
+}
+.tv-tag-pick-cancel:hover { color: var(--fg); background: transparent; }
+
+/* ── AI Suggestions ──────────────────────────────────────────────────────── */
+.tv-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  margin-bottom: var(--sp-3);
+}
+
+.tv-suggestion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-1) var(--sp-2);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+
+.tv-suggestion-name {
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.tv-suggestion-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tv-sugg-accept, .tv-sugg-reject {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+}
+
+.tv-sugg-accept {
+  color: var(--green);
+}
+.tv-sugg-accept:hover {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.tv-sugg-reject {
+  color: var(--fg-muted);
+}
+.tv-sugg-reject:hover {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+/* Panel label flex */
+.tv-panel-label {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted);
+  margin-bottom: var(--sp-3);
+}
+
+/* Crumb spacer + PII link */
+.tv-crumb-spacer {
+  flex: 1;
+}
+
+.tv-crumb-pii-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--fg-muted);
+  padding: 3px 8px;
+  border-radius: var(--r-full);
+  border: 1px solid var(--border);
+  transition: color var(--dur-fast), background var(--dur-fast), border-color var(--dur-fast);
+  white-space: nowrap;
+}
+.tv-crumb-pii-link:hover {
+  color: var(--fg);
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
+}
+
+/* Selected tag pick btn */
+.tv-tag-pick-btn.selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
