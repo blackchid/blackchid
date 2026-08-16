@@ -1,0 +1,123 @@
+/* ═══ Insights ═══════════════════════════════════════════════════════════ */
+.insights-page {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: var(--sp-6);
+  height: 100%;
+  animation: pageEnter var(--dur-slow) var(--ease-out) both;
+}
+
+.insights-master { display: flex; flex-direction: column; min-width: 0; }
+
+.insights-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-6);
+}
+
+.insight-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+
+.insight-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-4) var(--sp-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease), background var(--dur-fast) var(--ease);
+}
+.insight-row:hover { border-color: var(--border-hover); background: var(--bg-card); }
+.insight-row.active { border-color: var(--accent-border); background: var(--accent-soft); }
+
+.insight-row-main { min-width: 0; flex: 1; }
+.insight-row-title { font-size: 0.9375rem; font-weight: 600; color: var(--fg); margin-bottom: 2px; }
+.insight-row-desc {
+  font-size: 0.8125rem; color: var(--fg-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.insight-row-meta { display: flex; align-items: center; gap: var(--sp-3); flex-shrink: 0; }
+.insight-row-date { font-size: 0.75rem; color: var(--fg-muted); font-family: var(--font-mono); }
+.insight-row-chevron { color: var(--fg-muted); }
+
+/* Detail panel */
+.insights-detail {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: var(--sp-6);
+  overflow-y: auto;
+}
+
+.insights-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+.insights-detail-title-wrap { min-width: 0; }
+.insights-detail-title { font-size: 1.125rem; font-weight: 600; color: var(--fg); margin-bottom: 4px; }
+.insights-detail-date { font-size: 0.75rem; color: var(--fg-muted); font-family: var(--font-mono); }
+
+.insights-detail-desc {
+  font-size: 0.875rem; color: var(--fg-secondary); line-height: 1.6;
+  margin-bottom: var(--sp-6);
+}
+
+.insights-detail-section { border-top: 1px solid var(--border); padding-top: var(--sp-4); }
+.insights-section-label {
+  display: flex; align-items: center; gap: var(--sp-2);
+  font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--fg-muted); margin-bottom: var(--sp-3);
+}
+
+.insights-no-evidence {
+  font-size: 0.8125rem; color: var(--fg-muted); line-height: 1.6;
+}
+
+.evidence-list { display: flex; flex-direction: column; gap: var(--sp-3); }
+.evidence-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  padding: var(--sp-3);
+}
+.evidence-segment {
+  display: block; text-decoration: none; color: inherit;
+  border-radius: var(--r-sm);
+  transition: background var(--dur-fast) var(--ease);
+}
+.evidence-segment:hover { background: var(--bg-hover); }
+.evidence-segment-meta { display: flex; align-items: center; gap: var(--sp-2); margin-bottom: 6px; }
+.evidence-time { font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent); }
+.evidence-text {
+  font-family: var(--font-mono); font-size: 0.8125rem; color: var(--fg-secondary);
+  line-height: 1.5; margin: 0;
+}
+.evidence-note {
+  font-size: 0.8125rem; color: var(--fg-secondary); font-style: italic;
+  margin: var(--sp-2) 0 0; padding-top: var(--sp-2); border-top: 1px dashed var(--border);
+}
+.evidence-remove {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 0.75rem; color: var(--fg-muted);
+  background: none; border: none; cursor: pointer; padding: 4px 0;
+  margin-top: var(--sp-2);
+  transition: color var(--dur-fast) var(--ease);
+}
+.evidence-remove:hover { color: var(--red); }
+
+/* Responsive */
+@media (max-width: 900px) {
+  .insights-page { grid-template-columns: 1fr; }
+  .insights-detail { display: none; }
+}
