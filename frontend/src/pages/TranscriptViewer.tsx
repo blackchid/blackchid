@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  Play, Pause, ChevronLeft, FileText, Tag, Sparkles, Check,
+  Play, Pause, ChevronLeft, X, FileText, Tag, Sparkles, Check,
   Hash, MoreHorizontal, AlignLeft,
   Activity, Volume2, Bookmark, Download, Share2,
   Users, Clock, BarChart2, MessageSquare, Scissors
