@@ -54,9 +54,10 @@ function App() {
           
           {/* Project-level routes */}
           <Route path="/projects/:projectId" element={<ProtectedRoute><ProjectLayout /></ProtectedRoute>}>
-            <Route index element={<ProjectHome />} />
-            <Route path="recordings/:recordingId" element={<TranscriptViewer />} />
-            <Route path="recordings/:recordingId/pii" element={<PIIReview />} />
+            <Route path="" element={<ProjectHome />}>
+              <Route path="recordings/:recordingId" element={<TranscriptViewer />} />
+              <Route path="recordings/:recordingId/pii" element={<PIIReview />} />
+            </Route>
             <Route path="insights" element={<Insights />} />
             <Route path="search" element={<Search />} />
             <Route path="tags" element={<Tags />} />

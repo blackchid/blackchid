@@ -15,7 +15,7 @@ from models.audit_log import AuditLog
 from models.pii_detection import PIIDetection
 from models.insight_evidence import InsightEvidence
 from pathlib import Path
-from routers.auth import get_current_user
+from routers.auth import get_current_user, get_current_user_flexible
 from schemas.recording import RecordingResponse, TranscriptSegmentResponse, RecordingConsentUpdate
 from schemas.tag import TagApplicationDetail
 from services.permissions import require_project_role, require_recording_role, require_consent
@@ -135,11 +135,43 @@ def get_recording_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Check the status of a recording. The frontend polls this until 'done'."""
+    """Check the status of a recording. The frontend polls this until 'done' or 'error'."""
     require_recording_role(db, current_user, recording_id, ["editor", "viewer"])
     recording = db.query(Recording).filter(Recording.id == recording_id).first()
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
+    return recording
+
+
+@router.post("/recordings/{recording_id}/retranscribe", response_model=RecordingResponse)
+def retranscribe_recording(
+    recording_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Re-queue transcription for a recording that previously errored.
+    Deletes old segments and restarts the pipeline.
+    Requires editor role.
+    """
+    require_recording_role(db, current_user, recording_id, ["editor"])
+    recording = db.query(Recording).filter(Recording.id == recording_id).first()
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    if recording.status == "processing":
+        raise HTTPException(status_code=409, detail="Recording is already being processed")
+    if not recording.storage_path or not os.path.exists(recording.storage_path):
+        raise HTTPException(status_code=422, detail="Original audio file is no longer on disk — cannot re-transcribe")
+
+    # Clear previous segments
+    db.query(TranscriptSegment).filter(TranscriptSegment.recording_id == recording_id).delete()
+    recording.status = "pending"
+    recording.duration_seconds = None
+    db.commit()
+    db.refresh(recording)
+
+    background_tasks.add_task(process_recording, recording.id, recording.storage_path)
     return recording
 
 @router.get("/recordings/{recording_id}/transcript", response_model=List[TranscriptSegmentResponse])
@@ -164,40 +196,30 @@ def get_recording_transcript(
 
 @router.get("/recordings/{recording_id}/audio")
 def stream_audio(
-    recording_id: str, 
+    recording_id: str,
+    token: str | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user_flexible),
 ):
     """
-    Stream the ORIGINAL (unredacted) audio file for a recording.
-
-    Access control: EDITOR ONLY.
-    Viewers should receive the redacted export via POST /recordings/{id}/redact.
-    This separation ensures the original containing PII is never exposed to
-    project members who haven't been granted full access.
-
-    FastAPI's FileResponse honours Range requests, letting WaveSurfer seek.
+    Stream the audio/video file. Supports Range requests for seeking.
+    Auth: Authorization: Bearer <token>  OR  ?token=<token>
+    The ?token= form lets <audio src="...?token=xxx"> work in browsers.
     """
-    require_recording_role(db, current_user, recording_id, ["editor"])
+    require_recording_role(db, current_user, recording_id, ["editor", "viewer"])
     recording = db.query(Recording).filter(Recording.id == recording_id).first()
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
     if not recording.storage_path or not os.path.exists(recording.storage_path):
         raise HTTPException(status_code=404, detail="Audio file not found on disk")
 
-    # Determine MIME type from extension
     ext = os.path.splitext(recording.storage_path)[1].lower()
     mime_map = {
-        ".mp3": "audio/mpeg",
-        ".mp4": "audio/mp4",
-        ".m4a": "audio/mp4",
-        ".wav": "audio/wav",
-        ".ogg": "audio/ogg",
-        ".flac": "audio/flac",
-        ".webm": "audio/webm",
-        ".mov": "video/quicktime",
+        ".mp3": "audio/mpeg", ".mp4": "video/mp4", ".m4a": "audio/mp4",
+        ".wav": "audio/wav",  ".ogg": "audio/ogg", ".flac": "audio/flac",
+        ".webm": "video/webm", ".mov": "video/quicktime",
     }
-    media_type = mime_map.get(ext, "audio/mpeg")
+    media_type = mime_map.get(ext, "application/octet-stream")
 
     return FileResponse(
         path=recording.storage_path,
@@ -205,6 +227,7 @@ def stream_audio(
         filename=recording.filename,
         headers={"Accept-Ranges": "bytes"},
     )
+
 
 @router.delete("/recordings/{recording_id}")
 def delete_recording(

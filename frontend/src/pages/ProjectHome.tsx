@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Outlet } from 'react-router-dom';
 import { Search, Upload, FileVideo, Plus, MoreHorizontal, Mic, Clock, Shield } from 'lucide-react';
 import { fetchApi } from '../api';
 import { Badge, Spinner, EmptyState, ErrorBanner, Skeleton, useToast } from '../components';
@@ -234,6 +234,7 @@ export default function ProjectHome() {
           />
         )}
       </div>
+      <Outlet />
     </div>
   );
 }

@@ -1,4 +1,13 @@
 import os
+from pathlib import Path
+
+# Load .env from the backend directory (safe no-op if file missing or python-dotenv not installed)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env")
+except ImportError:
+    pass  # python-dotenv optional; use shell env vars instead
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import recordings, projects, tags, auth, insights, redaction, pii_review, clips

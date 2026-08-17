@@ -18,7 +18,7 @@ How authentication works end-to-end:
   6. If the token is missing/expired/tampered with → HTTP 401.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError
 from sqlalchemy.orm import Session
@@ -85,6 +85,53 @@ def get_current_user(
 # decode_token imported from auth_utils — defined here inline to avoid
 # a circular import (router → auth_utils → nothing back)
 from services.auth_utils import decode_access_token as decode_token  # noqa: E402
+
+
+def _resolve_user_from_token(token: str, db: Session) -> User:
+    """Shared logic: decode JWT or PAT → User."""
+    credentials_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    user_id = None
+    try:
+        payload = decode_token(token)
+        user_id = payload.get("sub")
+    except JWTError:
+        if token.startswith("bc_pat_"):
+            token_hash = hashlib.sha256(token.encode()).hexdigest()
+            pat = db.query(PersonalAccessToken).filter(PersonalAccessToken.token_hash == token_hash).first()
+            if pat:
+                user_id = pat.user_id
+    if user_id is None:
+        raise credentials_error
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None or not user.is_active:
+        raise credentials_error
+    return user
+
+
+def get_current_user_flexible(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> User:
+    """
+    Auth dependency that accepts a token from:
+      - Authorization: Bearer <token>  (standard API calls)
+      - ?token=<token>                 (for <audio src="...?token=xxx"> browser playback)
+    """
+    auth_header = request.headers.get("Authorization", "")
+    tok: str | None = None
+    if auth_header.startswith("Bearer "):
+        tok = auth_header[7:]
+    print("DEBUG AUTH HEADER TOK:", tok)
+    if not tok:
+        tok = request.query_params.get("token")
+        print("DEBUG QUERY PARAM TOK:", tok)
+    if not tok:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return _resolve_user_from_token(tok, db)
 
 
 # ── POST /auth/register ───────────────────────────────────────────────────────

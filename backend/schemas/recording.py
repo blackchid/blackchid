@@ -29,6 +29,7 @@ class TranscriptSegmentResponse(BaseModel):
     end_time: float
     speaker_label: str | None = None
     text: str
+    word_timestamps: list | None = None
     created_at: datetime
 
     class Config:

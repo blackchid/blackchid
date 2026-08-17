@@ -48,7 +48,7 @@ export default function Login() {
         <div className="login-showcase-brand">
           <svg width="28" height="28" viewBox="0 0 40 40" fill="none">
             <rect width="40" height="40" rx="10" fill="url(#sc-grad)" />
-            <text x="50%" y="53%" textAnchor="middle" dominantBaseline="central" fill="#0a0a0a" fontWeight="700" fontSize="18" fontFamily="Inter, sans-serif">P</text>
+            <text x="50%" y="53%" textAnchor="middle" dominantBaseline="central" fill="#0a0a0a" fontWeight="700" fontSize="18" fontFamily="Inter, sans-serif">B</text>
             <defs>
               <linearGradient id="sc-grad" x1="0" y1="0" x2="40" y2="40">
                 <stop offset="0%" stopColor="#c08a3e" />
@@ -56,7 +56,7 @@ export default function Login() {
               </linearGradient>
             </defs>
           </svg>
-          <span className="login-showcase-brand-text">Papom</span>
+          <span className="login-showcase-brand-text">BlackChid</span>
         </div>
 
         <div className="login-showcase-hero">
@@ -117,7 +117,7 @@ export default function Login() {
           <div className="login-logo">
             <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
               <rect width="40" height="40" rx="10" fill="url(#logo-grad)" />
-              <text x="50%" y="53%" textAnchor="middle" dominantBaseline="central" fill="#0a0a0a" fontWeight="700" fontSize="18" fontFamily="Inter, sans-serif">P</text>
+              <text x="50%" y="53%" textAnchor="middle" dominantBaseline="central" fill="#0a0a0a" fontWeight="700" fontSize="18" fontFamily="Inter, sans-serif">B</text>
               <defs>
                 <linearGradient id="logo-grad" x1="0" y1="0" x2="40" y2="40">
                   <stop offset="0%" stopColor="#c08a3e" />
@@ -127,7 +127,7 @@ export default function Login() {
             </svg>
           </div>
 
-          <h1 className="login-title">Welcome to Papom</h1>
+          <h1 className="login-title">Welcome to BlackChid</h1>
           <p className="login-subtitle">Sign in to your UX research workspace</p>
 
           <form onSubmit={handleLogin} className="login-form">
@@ -175,7 +175,7 @@ export default function Login() {
         </div>
 
         <p className="login-branding text-muted">
-          Papom — Open-source UX Research Platform
+          BlackChid — Open-source UX Research Platform
         </p>
       </div>
     </div>

@@ -257,7 +257,7 @@ export default function SettingsPage({ projectMode = false }: ProjectSettingsPro
               <div>
                 <p className="settings-info-title">Claude / Cursor Integration</p>
                 <p className="settings-info-body text-muted text-sm">
-                  Papom ships an MCP server at <code className="code-inline">backend/mcp_server.py</code>. Configure it in your AI client with your PAT to enable <code className="code-inline">search_insights</code>, <code className="code-inline">get_project_summary</code>, and <code className="code-inline">get_segments_by_tag</code> tools.
+                  BlackChid ships an MCP server at <code className="code-inline">backend/mcp_server.py</code>. Configure it in your AI client with your PAT to enable <code className="code-inline">search_insights</code>, <code className="code-inline">get_project_summary</code>, and <code className="code-inline">get_segments_by_tag</code> tools.
                 </p>
               </div>
             </div>
