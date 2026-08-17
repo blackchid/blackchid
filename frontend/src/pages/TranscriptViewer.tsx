@@ -226,19 +226,16 @@ export default function TranscriptViewer() {
       <div className="tv2-shell" onClick={() => setShowTagPicker(false)}>
 
       {/* HEADER */}
-      <header className="tv2-header">
+      <header className="tv2-header" style={{ padding: "16px 24px", borderBottom: "none" }}>
         <div className="tv2-header-left">
           <Link to={`/projects/${projectId}`} className="tv2-back-btn"><X size={16} /></Link>
-          <div className="tv2-breadcrumb">
-            <span className="tv2-bc-project">Project</span>
-            <span className="tv2-bc-sep">/</span>
-            <span className="tv2-bc-file" title={recording?.filename}>{recording?.filename || 'Recording'}</span>
+          <div className="tv2-breadcrumb" style={{ fontSize: "0.85rem", color: "var(--fg-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
+            <span>Project</span> <span style={{opacity: 0.5}}>/</span> <span style={{color: "var(--fg)"}}>{recording?.filename}</span>
           </div>
-          <span className={`tv2-status-badge tv2-status-${recording?.status ?? 'pending'}`}>
-            {recording?.status?.toUpperCase()}
-          </span>
-          {recording?.duration_seconds && <span className="tv2-meta-chip"><Clock size={10}/> {fmtTime(recording.duration_seconds)}</span>}
-          {wordCount > 0 && <span className="tv2-meta-chip">{wordCount} words</span>}
+          
+          
+          
+          
         </div>
         <div className="tv2-header-right">
           <button className="tv2-hdr-btn" title="Download"><Download size={14}/></button>
@@ -251,9 +248,10 @@ export default function TranscriptViewer() {
       <div className="tv2-body">
         {/* CENTER */}
         <main className="tv2-main">
+          <h1 className="tv2-big-title">{recording?.filename || 'Untitled recording'}</h1>
           <div className="tv2-view-toggle">
-            <button className={`tv2-view-pill ${highlightMode==='original'?'active':''}`} onClick={() => setHighlightMode('original')}><AlignLeft size={11}/> Transcript</button>
-            <button className={`tv2-view-pill ${highlightMode==='highlights'?'active':''}`} onClick={() => setHighlightMode('highlights')}><Bookmark size={11}/> Highlights</button>
+            <button className={`tv2-view-pill ${highlightMode==='original'?'active':''}`} onClick={() => setHighlightMode('original')}>Original</button>
+            <button className={`tv2-view-pill ${highlightMode==='highlights'?'active':''}`} onClick={() => setHighlightMode('highlights')}>Highlights only</button>
           </div>
 
           {/* PLAYER */}
@@ -328,7 +326,7 @@ export default function TranscriptViewer() {
           {/* TRANSCRIPT */}
           <div className="tv2-transcript-wrap">
             <div className="tv2-transcript-header">
-              <span className="tv2-transcript-title"><Activity size={13}/> Transcript {segments.length>0&&<span className="tv2-seg-count">{segments.length} segments</span>}</span>
+              <span className="tv2-transcript-title" style={{ fontSize: "1.1rem", fontWeight: 700, color: "#fff" }}>Transcript</span>
               <div className="tv2-transcript-tools">
                 <button className="tv2-tool-btn">👍</button>
                 <button className="tv2-tool-btn">👎</button>

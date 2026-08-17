@@ -5,19 +5,26 @@
 /* Shell: escape the main-content padding, fill the viewport */
 .tv2-shell {
   position: fixed;
-  top: 16px;
-  bottom: 16px;
-  right: 16px;
-  left: 280px; /* offset over project home */
+  top: 32px;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 1400px;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  background: #141416;
   overflow: hidden;
   z-index: 100;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
-  animation: slideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 40px 80px -20px rgba(0,0,0,0.8);
+  animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translate(-50%, 20px) scale(0.98); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 
 @keyframes slideIn {
@@ -108,12 +115,12 @@
   display: flex;
   flex-direction: column;
   overflow-y: auto;
-  padding: 20px 24px;
-  gap: 16px;
+  padding: 40px 60px;
+  gap: 24px;
   min-width: 0;
-  /* Center content with max-width */
-  max-width: 1000px;
-  margin: 0 auto; align-items: stretch;
+  max-width: 800px;
+  margin: 0 auto;
+  align-items: stretch;
   width: 100%;
 }
 
@@ -141,9 +148,10 @@
 .tv2-player-card {
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: #1e1e24;
+  background: #000;
   flex-shrink: 0;
+  width: 100%;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
 }
 
 .tv2-video-area {
@@ -285,17 +293,20 @@
 
 /* ── TRANSCRIPT ──────────────────────────────────────────── */
 .tv2-transcript-wrap {
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 12px;
-  background: #1e1e24;
-  overflow: hidden;
-  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 
 .tv2-transcript-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px; border-bottom: 1px solid var(--border);
-  background: #25252d;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 16px;
 }
 .tv2-transcript-title {
   display: flex; align-items: center; gap: 6px;
@@ -616,11 +627,55 @@
 
 /* ── RESPONSIVE ──────────────────────────────────────────── */
 @media (max-width: 1100px) {
-  .tv2-shell { left: 200px; }
+  .tv2-shell {
+  position: fixed;
+  top: 32px;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 1400px;
+  display: flex;
+  flex-direction: column;
+  background: #141416;
+  overflow: hidden;
+  z-index: 100;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 40px 80px -20px rgba(0,0,0,0.8);
+  animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translate(-50%, 20px) scale(0.98); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
   .tv2-aside  { width: 240px; }
 }
 @media (max-width: 860px) {
-  .tv2-shell { left: 0; }
+  .tv2-shell {
+  position: fixed;
+  top: 32px;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 90%;
+  max-width: 1400px;
+  display: flex;
+  flex-direction: column;
+  background: #141416;
+  overflow: hidden;
+  z-index: 100;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 40px 80px -20px rgba(0,0,0,0.8);
+  animation: slideInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideInUp {
+  from { opacity: 0; transform: translate(-50%, 20px) scale(0.98); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
   .tv2-aside  { display: none; }
   .tv2-main   { padding: 12px 16px; }
 }
@@ -631,12 +686,22 @@
 .tv2-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(8px);
   z-index: 90;
-  backdrop-filter: blur(2px);
   animation: fadeIn 0.2s ease-out;
 }
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
+}
+
+
+.tv2-big-title {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: #fff;
+  margin: 0 0 16px 0;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
