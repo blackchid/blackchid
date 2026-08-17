@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useParams } from 'react-router-dom';
 import {
   Play, Pause, ChevronLeft, X, FileText, Tag, Sparkles, Check,
@@ -197,21 +198,29 @@ export default function TranscriptViewer() {
   const dur = mediaDuration ?? recording?.duration_seconds;
   const pct = dur ? Math.min((currentTime / dur) * 100, 100) : 0;
 
-  if (isLoading) return (
-    <div className="tv2-shell"><div className="tv2-center"><Spinner size="md" /><span className="tv2-load-txt">Loading…</span></div></div>
+  if (isLoading) return createPortal(
+    <>
+      <div className="tv2-backdrop" onClick={() => navigate(`/projects/${projectId}`)} />
+      <div className="tv2-shell"><div className="tv2-center"><Spinner size="md" /><span className="tv2-load-txt">Loading…</span></div></div>
+    </>,
+    document.body
   );
-  if (error) return (
-    <div className="tv2-shell"><div className="tv2-center">
-      <div className="tv2-err-box">
-        <span className="tv2-err-icon">⚠</span>
-        <p className="tv2-err-title">Could not load recording</p>
-        <p className="tv2-err-body">{error}</p>
-        <button className="tv2-btn-primary" onClick={() => window.location.reload()}>Reload</button>
-      </div>
-    </div></div>
+  if (error) return createPortal(
+    <>
+      <div className="tv2-backdrop" onClick={() => navigate(`/projects/${projectId}`)} />
+      <div className="tv2-shell"><div className="tv2-center">
+        <div className="tv2-err-box">
+          <span className="tv2-err-icon">⚠</span>
+          <p className="tv2-err-title">Could not load recording</p>
+          <p className="tv2-err-body">{error}</p>
+          <button className="tv2-btn-primary" onClick={() => window.location.reload()}>Reload</button>
+        </div>
+      </div></div>
+    </>,
+    document.body
   );
 
-  return (
+  return createPortal(
     <>
       <div className="tv2-backdrop" onClick={() => navigate(`/projects/${projectId}`)} />
       <div className="tv2-shell" onClick={() => setShowTagPicker(false)}>
@@ -551,6 +560,7 @@ export default function TranscriptViewer() {
         </div>
       )}
     </div>
-    </>
+    </>,
+    document.body
   );
 }
