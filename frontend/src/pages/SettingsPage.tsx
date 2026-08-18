@@ -118,7 +118,7 @@ export default function SettingsPage({ projectMode = false }: ProjectSettingsPro
     new Date(d).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
-    <div className="settings-page" style={{ animation: 'pageEnter var(--dur-slow) var(--ease-out) both' }}>
+    <div className="settings-page" style={{ animation: 'pageEnter var(--dur-slow) var(--ease-out) backwards' }}>
       <div className="settings-head">
         <Settings size={18} className="text-muted" />
         <div>

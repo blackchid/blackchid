@@ -419,6 +419,15 @@ input:disabled {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* Never leave content invisible for users who opt out of motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.95); }
   to   { opacity: 1; transform: scale(1); }
@@ -492,12 +501,12 @@ input:disabled {
 }
 
 /* ── Animation Utility Classes ───────────────────────────────────────────── */
-.anim-page-enter    { animation: pageEnter var(--dur-slow) var(--ease-out) both; }
-.anim-scale-in      { animation: scaleIn var(--dur-normal) var(--ease-spring) both; }
-.anim-slide-left    { animation: slideInLeft var(--dur-normal) var(--ease-out) both; }
-.anim-slide-right   { animation: slideInRight var(--dur-normal) var(--ease-out) both; }
-.anim-slide-down    { animation: slideInDown var(--dur-normal) var(--ease-out) both; }
-.anim-fade-in       { animation: fadeIn var(--dur-normal) var(--ease) both; }
+.anim-page-enter    { animation: pageEnter var(--dur-slow) var(--ease-out) backwards; }
+.anim-scale-in      { animation: scaleIn var(--dur-normal) var(--ease-spring) backwards; }
+.anim-slide-left    { animation: slideInLeft var(--dur-normal) var(--ease-out) backwards; }
+.anim-slide-right   { animation: slideInRight var(--dur-normal) var(--ease-out) backwards; }
+.anim-slide-down    { animation: slideInDown var(--dur-normal) var(--ease-out) backwards; }
+.anim-fade-in       { animation: fadeIn var(--dur-normal) var(--ease) backwards; }
 .anim-float         { animation: float 3s var(--ease) infinite; }
 .anim-glow          { animation: glowPulse 3s var(--ease) infinite; }
 

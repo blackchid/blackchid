@@ -2,7 +2,7 @@
 .ph {
   display: flex;
   flex-direction: column;
-  animation: pageEnter var(--dur-slow) var(--ease-out) both;
+  animation: pageEnter var(--dur-slow) var(--ease-out) backwards;
 }
 
 /* Project header */
@@ -140,7 +140,8 @@
 .ph-table-wrap {
   border: 1px solid var(--border);
   border-radius: var(--r-xl);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 30%),
     var(--bg-surface);

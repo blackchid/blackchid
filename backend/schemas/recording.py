@@ -7,6 +7,7 @@ class RecordingResponse(BaseModel):
     filename: str
     duration_seconds: float | None = None
     status: str
+    error_message: str | None = None
     created_at: datetime
     updated_at: datetime
     

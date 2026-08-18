@@ -74,6 +74,7 @@ def process_recording(recording_id: str, audio_path: str) -> None:
 
         # ── 1. Set status → processing ────────────────────────────────────────
         recording.status = "processing"
+        recording.error_message = None  # clear any failure reason from a previous attempt
         db.commit()
 
         # Validate file exists

@@ -31,6 +31,10 @@ class Recording(Base, TimestampMixin):
     # Tracks where the file is in the transcription pipeline
     # Allowed values: pending | processing | done | error
     status: Mapped[str] = mapped_column(Text, nullable=False, default="pending")
+
+    # Human-readable failure reason, populated when status == "error".
+    # Cleared again when a new processing attempt starts.
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     
     # Consent fields
     consent_recording: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

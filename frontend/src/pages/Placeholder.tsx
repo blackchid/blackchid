@@ -3,7 +3,7 @@ import './Placeholder.css';
 
 export default function Placeholder({ title }: { title: string }) {
   return (
-    <div className="placeholder-page" style={{ animation: 'pageEnter var(--dur-slow) var(--ease-out) both' }}>
+    <div className="placeholder-page" style={{ animation: 'pageEnter var(--dur-slow) var(--ease-out) backwards' }}>
       <div className="placeholder-card">
         <div className="placeholder-icon">
           <Construction size={28} strokeWidth={1.5} />

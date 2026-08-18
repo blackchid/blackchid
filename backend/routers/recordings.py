@@ -159,8 +159,8 @@ def retranscribe_recording(
     recording = db.query(Recording).filter(Recording.id == recording_id).first()
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
-    if recording.status == "processing":
-        raise HTTPException(status_code=409, detail="Recording is already being processed")
+    if recording.status in ("processing", "pending"):
+        raise HTTPException(status_code=409, detail="Recording is already queued or being processed")
     if not recording.storage_path or not os.path.exists(recording.storage_path):
         raise HTTPException(status_code=422, detail="Original audio file is no longer on disk — cannot re-transcribe")
 
@@ -168,6 +168,7 @@ def retranscribe_recording(
     db.query(TranscriptSegment).filter(TranscriptSegment.recording_id == recording_id).delete()
     recording.status = "pending"
     recording.duration_seconds = None
+    recording.error_message = None
     db.commit()
     db.refresh(recording)
 

@@ -63,8 +63,13 @@ export default function ProjectHome() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      await fetchApi(`/projects/${projectId}/recordings`, { method: 'POST', body: fd });
+      const rec = await fetchApi(`/projects/${projectId}/recordings`, { method: 'POST', body: fd });
       toast('Upload started', 'success');
+      // Jump straight into the recording so the user sees transcription progress.
+      if (rec?.id) {
+        navigate(`/projects/${projectId}/recordings/${rec.id}`);
+        return;
+      }
       await load();
     } catch (err: any) {
       const msg = err.message || 'Upload failed';
@@ -105,7 +110,7 @@ export default function ProjectHome() {
   };
 
   return (
-    <div className="ph" style={{animation: 'pageEnter var(--dur-slow) var(--ease-out) both'}}>
+    <div className="ph" style={{animation: 'pageEnter var(--dur-slow) var(--ease-out) backwards'}}>
       {/* Project header */}
       <div className="ph-project-head">
         <div className="ph-project-info">

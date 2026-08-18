@@ -88,7 +88,7 @@ export default function AuditLog() {
   }
 
   return (
-    <div className="audit-page" style={{ animation: 'pageEnter var(--dur-slow) var(--ease-out) both' }}>
+    <div className="audit-page" style={{ animation: 'pageEnter var(--dur-slow) var(--ease-out) backwards' }}>
       {/* Header */}
       <div className="audit-head">
         <div>

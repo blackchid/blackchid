@@ -68,7 +68,7 @@ export default function Search() {
   };
 
   return (
-    <div className="search-page" style={{ animation: 'pageEnter var(--dur-slow) var(--ease-out) both' }}>
+    <div className="search-page" style={{ animation: 'pageEnter var(--dur-slow) var(--ease-out) backwards' }}>
       {/* Header */}
       <div className="search-head">
         <div>

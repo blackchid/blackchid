@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { Link, useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Play, Pause, ChevronLeft, X, FileText, Tag, Sparkles, Check,
-  Hash, MoreHorizontal, AlignLeft,
+  Play, Pause, X, FileText, Tag, Sparkles, Check,
+  Hash, MoreHorizontal, ThumbsUp, ThumbsDown,
   Activity, Volume2, Bookmark, Download, Share2,
-  Users, Clock, BarChart2, MessageSquare, Scissors
+  Users, Clock, BarChart2, MessageSquare, Scissors,
+  FolderOpen, FileVideo
 } from 'lucide-react';
 import { fetchApi } from '../api';
 import { Spinner, useToast } from '../components';
@@ -20,6 +21,7 @@ interface Segment {
 interface Recording {
   id: string; project_id: string; filename: string;
   duration_seconds: number | null; status: string;
+  error_message?: string | null;
   created_at: string; updated_at: string;
   consent_recording: boolean; consent_external_sharing: boolean; consent_ai_processing: boolean;
 }
@@ -31,27 +33,46 @@ interface TagApplication {
 
 const SPEAKER_COLORS = ['#818cf8','#4ade80','#fb923c','#2dd4bf','#e879f9','#fbbf24','#f87171','#60a5fa'];
 const SPEAKER_BG = ['rgba(129,140,248,0.12)','rgba(74,222,128,0.12)','rgba(251,146,60,0.12)','rgba(45,212,180,0.12)','rgba(232,121,249,0.12)','rgba(251,191,36,0.12)'];
+const SPEEDS = [1, 1.25, 1.5, 1.75, 2];
 type RightTab = 'summary' | 'ai' | 'tags' | 'clips';
 
 const fmtTime = (s: number) => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
 const speakerName = (l: string) => l.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 
+// Approximate pipeline steps shown in the transcribing popup. `at` is the
+// elapsed-seconds threshold after which the step is shown as in-progress —
+// the backend doesn't report fine-grained progress, so these are estimates.
+const PROC_STEPS = [
+  { label: 'Upload complete', at: 0 },
+  { label: 'Transcribing with WhisperX', at: 1 },
+  { label: 'Aligning words & diarizing speakers', at: 30 },
+  { label: 'Embedding & saving segments', at: 90 },
+];
+
 export default function TranscriptViewer() {
   const { projectId, recordingId } = useParams();
+  const navigate = useNavigate();
   const { toast } = useToast();
+
+  const close = useCallback(() => navigate(`/projects/${projectId}`), [navigate, projectId]);
 
   const [recording, setRecording] = useState<Recording | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [projectTags, setProjectTags] = useState<TagModel[]>([]);
   const [tagApps, setTagApps] = useState<TagApplication[]>([]);
+  const [projectName, setProjectName] = useState('');
+  const [rate, setRate] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [rightTab, setRightTab] = useState<RightTab>('summary');
   const [highlightMode, setHighlightMode] = useState<'original'|'highlights'>('original');
   const [retrying, setRetrying] = useState(false);
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | HTMLAudioElement | null>(null);
+  // Callback ref shared by <video> and <audio> so audio-only recordings
+  // still get a playable media element behind the waveform visual.
+  const attachMedia = useCallback((el: HTMLVideoElement | HTMLAudioElement | null) => { videoRef.current = el; }, []);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [mediaDuration, setMediaDuration] = useState<number | null>(null);
@@ -74,23 +95,6 @@ export default function TranscriptViewer() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
   }, []);
 
-  const startPolling = useCallback((id: string) => {
-    stopPolling();
-    pollRef.current = setInterval(async () => {
-      try {
-        const rec = await fetchApi(`/recordings/${id}`);
-        setRecording(rec);
-        if (rec.status === 'done') {
-          stopPolling();
-          const segs = await fetchApi(`/recordings/${id}/transcript`).catch(() => []);
-          setSegments(segs);
-        } else if (rec.status === 'error') { stopPolling(); }
-      } catch { /* ignore */ }
-    }, 3000);
-  }, [stopPolling]);
-
-  useEffect(() => () => stopPolling(), [stopPolling]);
-
   const loadTags = useCallback(async () => {
     if (!projectId || !recordingId) return;
     try {
@@ -101,6 +105,54 @@ export default function TranscriptViewer() {
       setProjectTags(tags); setTagApps(apps);
     } catch { /* non-fatal */ }
   }, [projectId, recordingId]);
+
+  const startPolling = useCallback((id: string) => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const rec = await fetchApi(`/recordings/${id}`);
+        setRecording(rec);
+        if (rec.status === 'done') {
+          stopPolling();
+          const segs = await fetchApi(`/recordings/${id}/transcript`).catch(() => []);
+          setSegments(segs);
+          // Tag applications from a previous transcription were cascade-deleted
+          // on re-transcribe — refresh so no stale chips remain.
+          loadTags();
+          toast('Transcription complete', 'success');
+        } else if (rec.status === 'error') { stopPolling(); }
+      } catch { /* ignore */ }
+    }, 3000);
+  }, [stopPolling, loadTags, toast]);
+
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
+  // Escape closes the tag picker first (if open), otherwise the whole modal.
+  const tagPickerOpenRef = useRef(false);
+  tagPickerOpenRef.current = showTagPicker;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (tagPickerOpenRef.current) { setShowTagPicker(false); return; }
+      setSelectionToolbar(null);
+      close();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [close]);
+
+  const isTranscribing = recording?.status === 'processing' || recording?.status === 'pending';
+
+  // Elapsed-time ticker for the transcribing popup. The start time comes from
+  // recording.updated_at (set server-side when processing began) so the
+  // counter stays accurate after a page refresh.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!isTranscribing) return;
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [isTranscribing]);
 
   useEffect(() => {
     setError(''); setIsLoading(true);
@@ -113,7 +165,8 @@ export default function TranscriptViewer() {
     }).catch((e: any) => setError(e.message || 'Failed to load'))
       .finally(() => setIsLoading(false));
     loadTags();
-  }, [recordingId, loadTags, startPolling]);
+    fetchApi(`/projects/${projectId}`).then(p => setProjectName(p?.name || '')).catch(() => {});
+  }, [recordingId, loadTags, startPolling, projectId]);
 
   const mediaSrc = (() => {
     if (!recordingId || recording?.status !== 'done') return null;
@@ -121,38 +174,80 @@ export default function TranscriptViewer() {
     const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
     return `${baseUrl}/recordings/${recordingId}/audio?token=${encodeURIComponent(token)}`;
   })();
+  // Force the <video> to remount when the source becomes available so it
+  // re-fetches (a stale src attribute won't reload once the element exists).
+  const videoKey = mediaSrc ?? 'empty';
+
+  // Audio-only recordings get a waveform visual instead of a black video box.
+  const isVideo = /\.(mp4|mov|webm|m4v|mkv|avi)$/i.test(recording?.filename || '');
+  const waveBars = useMemo(
+    () => Array.from({ length: 96 }, (_, i) =>
+      16 + Math.round(Math.abs(Math.sin(i * 0.35) * 0.6 + Math.sin(i * 0.13) * 0.4) * 64)
+    ),
+    []
+  );
+
+  const cycleSpeed = useCallback(() => {
+    const next = SPEEDS[(SPEEDS.indexOf(rate) + 1) % SPEEDS.length];
+    setRate(next);
+    const a = videoRef.current; if (a) a.playbackRate = next;
+  }, [rate]);
+
+  // Keep latest segments in a ref so the <video> onTimeUpdate handler always
+  // sees current data (the element captures the first render's callback).
+  const segmentsRef = useRef<Segment[]>([]);
+  segmentsRef.current = segments;
 
   const handleTimeUpdate = useCallback(() => {
     const a = videoRef.current;
     if (!a) return;
     const t = a.currentTime;
     setCurrentTime(t);
-    const seg = segments.find(s => t >= s.start_time && t < s.end_time);
-    if (seg && seg.id !== activeSegId) setActiveSegId(seg.id);
+    const segs = segmentsRef.current;
+    const seg = segs.find(s => t >= s.start_time && t < s.end_time);
+    setActiveSegId(prev => (seg && seg.id !== prev) ? seg.id : prev);
     if (seg?.word_timestamps?.length) {
-      const wIdx = seg.word_timestamps.findIndex(w => t >= (w.start??0) && t < (w.end??seg.end_time));
+      // Use <= on the end boundary so the last word stays highlighted until
+      // the next word/segment begins, instead of flickering off.
+      const wIdx = seg.word_timestamps.findIndex(w => t >= (w.start ?? 0) && t <= (w.end ?? seg.end_time));
       setActiveWordKey(wIdx >= 0 ? `${seg.id}-${wIdx}` : null);
-    } else { setActiveWordKey(null); }
-  }, [segments, activeSegId]);
+    } else {
+      setActiveWordKey(null);
+    }
+  }, []);
 
   useEffect(() => {
-    if (activeSegRef.current) activeSegRef.current.scrollIntoView({behavior:'smooth',block:'center'});
+    // Defer to next frame so the ref has attached to the new active segment.
+    const id = requestAnimationFrame(() => {
+      if (activeSegRef.current) activeSegRef.current.scrollIntoView({behavior:'smooth',block:'center'});
+    });
+    return () => cancelAnimationFrame(id);
   }, [activeSegId]);
 
   const seekTo = useCallback((t: number) => {
     const a = videoRef.current;
     if (!a) return;
-    a.currentTime = t; a.play(); setCurrentTime(t);
+    // Guard: don't play until the element is ready, otherwise the play()
+    // promise rejects silently and nothing happens.
+    const ready = a.readyState >= 2; // HAVE_CURRENT_DATA
+    a.currentTime = t;
+    setCurrentTime(t);
+    if (ready) { a.play().catch(() => { /* autoplay block — ignore */ }); }
   }, []);
+
+  // Mirror duration in a ref so the progress-click handler always sees the
+  // latest value without re-creating the callback each render.
+  const durRef = useRef<number | null>(null);
+  durRef.current = mediaDuration ?? recording?.duration_seconds ?? null;
 
   const handleProgressClick = useCallback((e: React.MouseEvent) => {
     const track = progressRef.current;
     if (!track) return;
     const rect = track.getBoundingClientRect();
     const pct = (e.clientX - rect.left) / rect.width;
-    const dur = mediaDuration ?? recording?.duration_seconds ?? 0;
-    seekTo(Math.max(0, Math.min(pct * dur, dur)));
-  }, [mediaDuration, recording, seekTo]);
+    const dur = durRef.current ?? 0;
+    if (dur > 0) seekTo(Math.max(0, Math.min(pct * dur, dur)));
+  }, [seekTo]);
 
   const handleApplyTag = async (tagId: string) => {
     if (!tagPickerSegId) return;
@@ -164,13 +259,19 @@ export default function TranscriptViewer() {
     finally { setApplyingTag(false); }
   };
 
-  const handleRemoveTag = async (appId: string) => {
-    try { await fetchApi(`/tags/applications/${appId}`, {method:'DELETE'}); await loadTags(); toast('Tag removed','info'); } catch { /* */ }
+  const handleRemoveTag = async (tagId: string, segmentId: string) => {
+    try {
+      await fetchApi(`/tags/${tagId}/apply/${segmentId}`, { method: 'DELETE' });
+      await loadTags(); toast('Tag removed', 'info');
+    } catch (e: any) { toast(e.message || 'Failed to remove tag', 'error'); }
   };
 
   const handleRetranscribe = async () => {
     if (!recordingId) return;
     setRetrying(true);
+    setMediaError(false); // reset so the player recovers after re-transcribe
+    // Old segments are deleted server-side — drop any derived UI state too.
+    setTagApps([]); setSuggestions([]); setActiveSegId(null); setActiveWordKey(null);
     try {
       const rec = await fetchApi(`/recordings/${recordingId}/retranscribe`, {method:'POST'});
       setRecording(rec); setSegments([]); toast('Queued for re-transcription','success'); startPolling(recordingId);
@@ -179,10 +280,13 @@ export default function TranscriptViewer() {
   };
 
   const handleTextSelect = useCallback((segId: string) => {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.toString().trim()) { setSelectionToolbar(null); return; }
-    const rect = sel.getRangeAt(0).getBoundingClientRect();
-    setSelectionToolbar({ x: rect.left + rect.width/2, y: rect.top - 8, segId, text: sel.toString().trim() });
+    // Defer so the browser has finalized the selection after mouseup.
+    requestAnimationFrame(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.toString().trim()) { setSelectionToolbar(null); return; }
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      setSelectionToolbar({ x: rect.left + rect.width/2, y: rect.top - 8, segId, text: sel.toString().trim() });
+    });
   }, []);
 
   useEffect(() => {
@@ -194,20 +298,29 @@ export default function TranscriptViewer() {
   const wordCount = segments.reduce((n,s) => n + s.text.split(/\s+/).length, 0);
   const speakers = [...new Set(segments.map(s=>s.speaker_label).filter(Boolean))] as string[];
   const getSegTags = (id: string) => tagApps.filter(a => a.segment_id === id);
-  const highlightedSegs = highlightMode === 'highlights' ? segments.filter(s => getSegTags(s.id).length > 0) : segments;
+  const taggedIds = new Set(tagApps.map(a => a.segment_id));
+  const highlightedSegs = highlightMode === 'highlights'
+    ? segments.filter(s => taggedIds.has(s.id))
+    : segments;
   const dur = mediaDuration ?? recording?.duration_seconds;
-  const pct = dur ? Math.min((currentTime / dur) * 100, 100) : 0;
+  const safeDur = dur && dur > 0 ? dur : null;
+  const pct = safeDur ? Math.min((currentTime / safeDur) * 100, 100) : 0;
+
+  // Progress-step state for the transcribing popup
+  const procStartMs = recording?.updated_at ? new Date(recording.updated_at).getTime() : null;
+  const elapsed = procStartMs ? Math.max(0, Math.floor((now - procStartMs) / 1000)) : 0;
+  const activeStep = Math.max(0, PROC_STEPS.filter(s => elapsed >= s.at).length - 1);
 
   if (isLoading) return createPortal(
     <>
-      <div className="tv2-backdrop" onClick={() => navigate(`/projects/${projectId}`)} />
+      <div className="tv2-backdrop" onClick={close} />
       <div className="tv2-shell"><div className="tv2-center"><Spinner size="md" /><span className="tv2-load-txt">Loading…</span></div></div>
     </>,
     document.body
   );
   if (error) return createPortal(
     <>
-      <div className="tv2-backdrop" onClick={() => navigate(`/projects/${projectId}`)} />
+      <div className="tv2-backdrop" onClick={close} />
       <div className="tv2-shell"><div className="tv2-center">
         <div className="tv2-err-box">
           <span className="tv2-err-icon">⚠</span>
@@ -222,25 +335,27 @@ export default function TranscriptViewer() {
 
   return createPortal(
     <>
-      <div className="tv2-backdrop" onClick={() => navigate(`/projects/${projectId}`)} />
-      <div className="tv2-shell" onClick={() => setShowTagPicker(false)}>
+      <div className="tv2-backdrop" onClick={close} />
+      <div className="tv2-shell" role="dialog" aria-modal="true" aria-label={`Recording ${recording?.filename || ''}`} onClick={(e) => { /* only close if click hit the shell itself, not a child */ if (e.target === e.currentTarget) setShowTagPicker(false); }}>
 
       {/* HEADER */}
-      <header className="tv2-header" style={{ padding: "16px 24px", borderBottom: "none" }}>
+      <header className="tv2-header">
         <div className="tv2-header-left">
-          <Link to={`/projects/${projectId}`} className="tv2-back-btn"><X size={16} /></Link>
-          <div className="tv2-breadcrumb" style={{ fontSize: "0.85rem", color: "var(--fg-muted)", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>
-            <span>Project</span> <span style={{opacity: 0.5}}>/</span> <span style={{color: "var(--fg)"}}>{recording?.filename}</span>
+          <button className="tv2-back-btn" onClick={close} title="Close"><X size={16} /></button>
+          <div className="tv2-crumb-chip">
+            <span className="tv2-crumb-icon"><FolderOpen size={11} /></span>
+            <span className="txt">{projectName || 'Project'}</span>
           </div>
-          
-          
-          
-          
+          <span className="tv2-crumb-sep">/</span>
+          <div className="tv2-crumb-chip">
+            <span className="tv2-crumb-icon gold"><FileVideo size={11} /></span>
+            <span className="txt">{recording?.filename}</span>
+          </div>
         </div>
         <div className="tv2-header-right">
-          <button className="tv2-hdr-btn" title="Download"><Download size={14}/></button>
-          <button className="tv2-hdr-btn" title="Share"><Share2 size={14}/></button>
-          <button className="tv2-hdr-btn" title="More"><MoreHorizontal size={14}/></button>
+          <button className="tv2-hdr-btn" title="Download"><Download size={15}/></button>
+          <button className="tv2-hdr-btn" title="Share"><Share2 size={15}/></button>
+          <button className="tv2-hdr-btn" title="More"><MoreHorizontal size={15}/></button>
         </div>
       </header>
 
@@ -248,6 +363,7 @@ export default function TranscriptViewer() {
       <div className="tv2-body">
         {/* CENTER */}
         <main className="tv2-main">
+        <div className="tv2-content">
           <h1 className="tv2-big-title">{recording?.filename || 'Untitled recording'}</h1>
           <div className="tv2-view-toggle">
             <button className={`tv2-view-pill ${highlightMode==='original'?'active':''}`} onClick={() => setHighlightMode('original')}>Original</button>
@@ -256,17 +372,35 @@ export default function TranscriptViewer() {
 
           {/* PLAYER */}
           <div className="tv2-player-card">
-            <div className="tv2-video-area" onClick={() => { const a=videoRef.current; if(!a) return; isPlaying?a.pause():a.play(); }}>
-              {mediaSrc && (
-                <video ref={videoRef} src={mediaSrc} preload="metadata"
+            <div className={`tv2-video-area${isVideo ? '' : ' audio'}`} onClick={() => { const a=videoRef.current; if(!a) return; if(isPlaying){a.pause();}else{a.play().catch(()=>{});} }}>
+              {isVideo && mediaSrc && (
+                <video key={videoKey} ref={attachMedia} src={mediaSrc} preload="metadata"
                   style={{ width: '100%', height: '100%', objectFit: 'contain', position: 'absolute', top: 0, left: 0 }}
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={() => { const a = videoRef.current; if (a) setMediaDuration(a.duration); }}
                   onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)}
-                  onEnded={() => setIsPlaying(false)} onError={() => setMediaError(true)}
+                  onEnded={() => setIsPlaying(false)}
+                  onError={() => { const a = videoRef.current; if (a && a.error && a.error.code !== 0) setMediaError(true); }}
                 />
               )}
-              {mediaError && <div className="tv2-audio-err"><Volume2 size={16}/><span>Audio unavailable</span></div>}
+              {!isVideo && mediaSrc && (
+                <audio key={videoKey} ref={attachMedia} src={mediaSrc} preload="metadata" style={{ display: 'none' }}
+                  onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={() => { const a = videoRef.current; if (a) setMediaDuration(a.duration); }}
+                  onPlay={() => setIsPlaying(true)} onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
+                  onError={() => { const a = videoRef.current; if (a && a.error && a.error.code !== 0) setMediaError(true); }}
+                />
+              )}
+              {!isVideo && (
+                <div className="tv2-wave-vis" aria-hidden="true">
+                  {waveBars.map((h, i) => (
+                    <span key={i} style={{ height: `${h}%` }} className={i < Math.round(waveBars.length * pct / 100) ? 'played' : ''} />
+                  ))}
+                </div>
+              )}
+              <button className="tv2-speed-chip" title="Playback speed" onClick={e => { e.stopPropagation(); cycleSpeed(); }}>{rate.toFixed(2)}×</button>
+              {mediaError && mediaSrc && <div className="tv2-audio-err"><Volume2 size={16}/><span>Audio unavailable</span></div>}
               {activeSegId && (() => {
                 const seg = segments.find(s=>s.id===activeSegId);
                 const sp = seg?.speaker_label||'Unknown';
@@ -280,7 +414,7 @@ export default function TranscriptViewer() {
                   </div>
                 );
               })()}
-              <button className="tv2-big-play" onClick={e=>{e.stopPropagation();const a=videoRef.current;if(!a)return;isPlaying?a.pause():a.play();}}>
+              <button className={`tv2-big-play${isPlaying?' playing':''}`} onClick={e=>{e.stopPropagation();const a=videoRef.current;if(!a)return;if(isPlaying){a.pause();}else{a.play().catch(()=>{});}}}>
                 {isPlaying?<Pause size={24} strokeWidth={1.5}/>:<Play size={24} strokeWidth={1.5} style={{marginLeft:3}}/>}
               </button>
               {activeSegId && (() => {
@@ -298,12 +432,11 @@ export default function TranscriptViewer() {
                 );
               })()}
               <div className="tv2-speaker-timeline">
-                {segments.map(seg => {
+                {safeDur && segments.map(seg => {
                   const idx = speakers.indexOf(seg.speaker_label||'');
-                  const total = dur ?? 1;
                   return (
                     <div key={seg.id} className="tv2-timeline-seg"
-                      style={{left:`${(seg.start_time/total)*100}%`,width:`${((seg.end_time-seg.start_time)/total)*100}%`,backgroundColor:SPEAKER_COLORS[idx%SPEAKER_COLORS.length]}}
+                      style={{left:`${(seg.start_time/safeDur)*100}%`,width:`${((seg.end_time-seg.start_time)/safeDur)*100}%`,backgroundColor:SPEAKER_COLORS[idx%SPEAKER_COLORS.length]}}
                       onClick={e=>{e.stopPropagation();seekTo(seg.start_time);}} title={speakerName(seg.speaker_label||'Unknown')}/>
                   );
                 })}
@@ -311,7 +444,7 @@ export default function TranscriptViewer() {
               </div>
             </div>
             <div className="tv2-controls">
-              <button className="tv2-ctrl-play" onClick={() => {const a=videoRef.current;if(!a)return;isPlaying?a.pause():a.play();}}>
+              <button className="tv2-ctrl-play" onClick={() => {const a=videoRef.current;if(!a)return;if(isPlaying){a.pause();}else{a.play().catch(()=>{});}}}>
                 {isPlaying?<Pause size={12}/>:<Play size={12} style={{marginLeft:1}}/>}
               </button>
               <div className="tv2-progress" ref={progressRef} onClick={handleProgressClick}>
@@ -324,33 +457,42 @@ export default function TranscriptViewer() {
           </div>
 
           {/* TRANSCRIPT */}
-          <div className="tv2-transcript-wrap">
+          <div className="tv2-transcript-card">
             <div className="tv2-transcript-header">
-              <span className="tv2-transcript-title" style={{ fontSize: "1.1rem", fontWeight: 700, color: "#fff" }}>Transcript</span>
+              <span className="tv2-transcript-title">Transcript{segments.length > 0 && <span className="tv2-seg-count">{segments.length}</span>}</span>
               <div className="tv2-transcript-tools">
-                <button className="tv2-tool-btn">👍</button>
-                <button className="tv2-tool-btn">👎</button>
-                <button className="tv2-tool-btn"><MoreHorizontal size={13}/></button>
+                <button className="tv2-tool-btn" title="Mark useful"><ThumbsUp size={13}/></button>
+                <button className="tv2-tool-btn" title="Mark not useful"><ThumbsDown size={13}/></button>
+                <button className="tv2-tool-btn" title="More"><MoreHorizontal size={13}/></button>
               </div>
             </div>
 
-            {(recording?.status==='processing'||recording?.status==='pending') ? (
-              <div className="tv2-proc-state">
-                <div className="tv2-proc-ring"><Spinner size="md"/></div>
-                <p className="tv2-proc-title">Transcribing…</p>
-                <p className="tv2-proc-sub">Updates automatically when done.</p>
-                <div className="tv2-proc-steps">
-                  <div className="tv2-step done">✓ Upload complete</div>
-                  <div className="tv2-step active"><span className="tv2-pulse"/> Transcribing with WhisperX</div>
-                  <div className="tv2-step muted">· Speaker diarization</div>
-                  <div className="tv2-step muted">· Saving segments</div>
+            {isTranscribing ? (
+              <div className="tv2-proc-state tv2-proc-card">
+                <div className="tv2-proc-wave" aria-hidden="true">
+                  {Array.from({length: 21}).map((_, i) => (
+                    <span key={i} style={{ animationDelay: `${(i % 7) * 0.13}s`, animationDuration: `${0.9 + (i % 4) * 0.18}s` }} />
+                  ))}
                 </div>
+                <p className="tv2-proc-title">{recording?.status === 'pending' ? 'Queued for transcription' : 'Transcribing…'}</p>
+                <p className="tv2-proc-file">{recording?.filename}</p>
+                <p className="tv2-proc-sub">
+                  <span className="tv2-proc-timer">{fmtTime(elapsed)}</span> elapsed · this view updates automatically when done
+                </p>
+                <div className="tv2-proc-steps">
+                  {PROC_STEPS.map((step, i) => (
+                    <div key={step.label} className={`tv2-step ${i < activeStep ? 'done' : i === activeStep ? 'active' : 'muted'}`}>
+                      {i < activeStep ? '✓' : i === activeStep ? <span className="tv2-pulse"/> : '·'} {step.label}
+                    </div>
+                  ))}
+                </div>
+                <p className="tv2-proc-hint">You can close this window — processing continues in the background.</p>
               </div>
             ) : recording?.status==='error' ? (
               <div className="tv2-err-inline">
                 <div className="tv2-err-icon-wrap">✕</div>
                 <p className="tv2-err-title">Transcription failed</p>
-                <p className="tv2-err-body">Common causes: missing HF_TOKEN, unsupported format, or OOM.</p>
+                <p className="tv2-err-body">{recording?.error_message || 'Common causes: missing HF_TOKEN, unsupported format, or OOM.'}</p>
                 <button className="tv2-retry-btn" onClick={handleRetranscribe} disabled={retrying}>
                   {retrying?<Spinner size="sm"/>:'↺'} {retrying?'Queuing…':'Retry transcription'}
                 </button>
@@ -362,22 +504,22 @@ export default function TranscriptViewer() {
               </div>
             ) : (
               <div className="tv2-doc">
-                {highlightedSegs.map((seg, segIdx) => {
+                {highlightedSegs.map((seg) => {
                   const sp = seg.speaker_label||'Unknown';
                   const spIdx = speakers.indexOf(sp);
                   const color = SPEAKER_COLORS[spIdx%SPEAKER_COLORS.length];
-                  const bgColor = SPEAKER_BG[spIdx%SPEAKER_BG.length];
                   const isActive = activeSegId===seg.id;
                   const segTags = getSegTags(seg.id);
-                  const prevSeg = segIdx>0?highlightedSegs[segIdx-1]:null;
-                  const showHdr = !prevSeg||prevSeg.speaker_label!==seg.speaker_label;
+                  // Compare against the previous segment in the FULL list so
+                  // speaker headers stay correct when filtering to highlights.
+                  const origIdx = segments.findIndex(s => s.id === seg.id);
+                  const prevSeg = origIdx > 0 ? segments[origIdx - 1] : null;
+                  const showHdr = !prevSeg || prevSeg.speaker_label !== seg.speaker_label;
                   return (
                     <div key={seg.id}>
                       {showHdr && (
                         <div className="tv2-speaker-header">
-                          <div className="tv2-spk-avatar" style={{background:bgColor,borderColor:color}}>
-                            <span style={{color}}>{speakerName(sp).charAt(0)}</span>
-                          </div>
+                          <div className="tv2-spk-avatar">S{spIdx+1}</div>
                           <span className="tv2-spk-name" style={{color}}>{speakerName(sp)}</span>
                           <button className="tv2-timestamp-btn" onClick={()=>seekTo(seg.start_time)}>
                             <Play size={8} style={{marginLeft:1}}/> {fmtTime(seg.start_time)}
@@ -391,6 +533,13 @@ export default function TranscriptViewer() {
                         onMouseUp={()=>handleTextSelect(seg.id)}
                       >
                         {isActive && <div className="tv2-seg-accent" style={{background:color}}/>}
+                        {segTags.length>0 && (
+                          <div className="tv2-seg-markers">
+                            {segTags.map(app=>(
+                              <span key={app.id} className="tv2-seg-marker" style={{background:app.tag_color||'var(--accent)'}} title={app.tag_name}/>
+                            ))}
+                          </div>
+                        )}
                         <p className="tv2-seg-text">
                           {seg.word_timestamps?.length
                             ? seg.word_timestamps.map((w,wi)=>(
@@ -412,7 +561,7 @@ export default function TranscriptViewer() {
                           {segTags.map(app=>(
                             <span key={app.id} className="tv2-tag-chip" style={{background:app.tag_color?`${app.tag_color}22`:'var(--bg-elevated)',borderColor:app.tag_color||'var(--border)',color:app.tag_color||'var(--fg-secondary)'}}>
                               <Hash size={9}/> {app.tag_name}
-                              <button className="tv2-tag-remove" onClick={e=>{e.stopPropagation();handleRemoveTag(app.id);}}>×</button>
+                              <button className="tv2-tag-remove" onClick={e=>{e.stopPropagation();handleRemoveTag(app.tag_id, app.segment_id);}}>×</button>
                             </span>
                           ))}
                           <button className="tv2-seg-tag-btn" onClick={e=>{e.stopPropagation();setTagPickerSegId(seg.id);setShowTagPicker(true);}}>
@@ -439,17 +588,11 @@ export default function TranscriptViewer() {
               </div>
             )}
           </div>
+        </div>
         </main>
 
-        {/* SIDEBAR */}
+        {/* SIDEBAR: panel + vertical icon rail */}
         <aside className="tv2-aside">
-          <div className="tv2-aside-tabs">
-            {([{id:'summary',icon:<BarChart2 size={13}/>,label:'Summary'},{id:'ai',icon:<Sparkles size={13}/>,label:'AI'},{id:'tags',icon:<Tag size={13}/>,label:'Tags'},{id:'clips',icon:<Scissors size={13}/>,label:'Clips'}] as const).map(tab=>(
-              <button key={tab.id} className={`tv2-aside-tab${rightTab===tab.id?' active':''}`} onClick={()=>setRightTab(tab.id)}>
-                {tab.icon} {tab.label}
-              </button>
-            ))}
-          </div>
           <div className="tv2-aside-body">
             {rightTab==='summary' && <>
               <div className="tv2-aside-section">
@@ -544,6 +687,13 @@ export default function TranscriptViewer() {
               <p className="tv2-aside-empty">Select text in the transcript to create clips.</p>
               <button className="tv2-ai-tool-btn" style={{marginTop:8}}><Scissors size={12}/> Create clip from current position</button>
             </div>}
+          </div>
+          <div className="tv2-rail">
+            {([{id:'summary',icon:<BarChart2 size={16}/>,label:'Summary'},{id:'ai',icon:<Sparkles size={16}/>,label:'AI'},{id:'tags',icon:<Tag size={16}/>,label:'Tags'},{id:'clips',icon:<Scissors size={16}/>,label:'Clips'}] as const).map(tab=>(
+              <button key={tab.id} className={`tv2-rail-btn${rightTab===tab.id?' active':''}`} title={tab.label} onClick={()=>setRightTab(tab.id)}>
+                {tab.icon}
+              </button>
+            ))}
           </div>
         </aside>
       </div>

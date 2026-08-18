@@ -125,10 +125,8 @@ def get_current_user_flexible(
     tok: str | None = None
     if auth_header.startswith("Bearer "):
         tok = auth_header[7:]
-    print("DEBUG AUTH HEADER TOK:", tok)
     if not tok:
         tok = request.query_params.get("token")
-        print("DEBUG QUERY PARAM TOK:", tok)
     if not tok:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return _resolve_user_from_token(tok, db)

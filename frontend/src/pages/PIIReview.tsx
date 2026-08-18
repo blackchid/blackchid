@@ -207,7 +207,7 @@ export default function PIIReview() {
   }
 
   return (
-    <div className="pii-page" style={{ animation: 'pageEnter var(--dur-slow) var(--ease-out) both' }}>
+    <div className="pii-page" style={{ animation: 'pageEnter var(--dur-slow) var(--ease-out) backwards' }}>
       {/* Header */}
       <div className="pii-head">
         <div className="pii-head-left">
